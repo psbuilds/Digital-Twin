@@ -4,9 +4,9 @@ import { LocationSelector } from './components/LocationSelector';
 import { PollutantPanel } from './components/PollutantPanel';
 import { AtmosphericDNA } from './components/AtmosphericDNA';
 import { SyncNodes } from './components/SyncNodes';
-import { SimulationPanel } from './components/SimulationPanel';
 import { PredictivePanel } from './components/PredictivePanel';
 import { Hub3D } from './components/Hub3D';
+import { HeatmapSection } from './components/HeatmapSection';
 import { useAirQuality } from './hooks/useAirQuality';
 import { keralaLocations } from './data/keralaLocations';
 import { Cloud, Radio } from 'lucide-react';
@@ -26,14 +26,14 @@ function App() {
         return () => clearInterval(interval);
     }, []);
 
-    const [activeTab, setActiveTab] = useState('simulate');
+    const [activeTab, setActiveTab] = useState('predictive');
 
     const renderTab = () => {
         switch (activeTab) {
             case 'predictive': return <PredictivePanel data={data} />;
             case '3dhub': return <Hub3D data={data} />;
-            case 'simulate':
-            default: return <SimulationPanel />;
+            case 'heatmap': return <HeatmapSection />;
+            default: return <PredictivePanel data={data} />;
         }
     };
 
@@ -58,13 +58,13 @@ function App() {
                 </div>
 
                 <div className="flex space-x-2">
-                    {['simulate', 'predictive', '3dhub'].map(tab => (
+                    {['predictive', '3dhub', 'heatmap'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === tab
-                                    ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white'
-                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white'
+                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                 }`}
                         >
                             {tab.charAt(0).toUpperCase() + tab.slice(1).replace('hub', ' Hub')}
@@ -73,49 +73,55 @@ function App() {
                 </div>
             </header>
 
-            {/* Main Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                {/* Left Column (3) - Metrics & Selectors */}
-                <div className="lg:col-span-3 space-y-6 flex flex-col h-full">
-                    <LocationSelector
-                        selectedLocation={selectedLocation}
-                        onSelect={setSelectedLocation}
-                    />
-                    <AtmosphericDNA data={data} />
-                    <SyncNodes refreshKey={refreshKey} />
+            {/* Main Content Area */}
+            {activeTab === 'heatmap' ? (
+                <div className="h-[calc(100vh-160px)]">
+                    <HeatmapSection />
                 </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                {/* Center Column (6) - Primary Display Hub (Map & Advanced Features) */}
-                <div className="lg:col-span-6 flex flex-col space-y-6 border border-slate-800/50 rounded-2xl bg-slate-900/10 p-2 shadow-inner h-[800px]">
-                    {/* Map Viewer Container */}
-                    <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative order-1">
-                        <MapViewer selectedLocation={selectedLocation} />
-                        {error && (
-                            <div className="absolute top-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] text-sm">
-                                Live link disrupted. Falling back.
-                            </div>
-                        )}
-                        {loading && (
-                            <div className="absolute top-4 left-4 bg-blue-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] flex items-center text-sm">
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Updating telemetry...
-                            </div>
-                        )}
+                    {/* Left Column (3) - Metrics & Selectors */}
+                    <div className="lg:col-span-3 space-y-6 flex flex-col h-full">
+                        <LocationSelector
+                            selectedLocation={selectedLocation}
+                            onSelect={setSelectedLocation}
+                        />
+                        <AtmosphericDNA data={data} />
+                        <SyncNodes refreshKey={refreshKey} />
                     </div>
 
-                    {/* Advanced Tab Panels Container */}
-                    <div className="h-64 mt-6">
-                        {renderTab()}
+                    {/* Center Column (6) - Primary Display Hub (Map & Advanced Features) */}
+                    <div className="lg:col-span-6 flex flex-col space-y-6 border border-slate-800/50 rounded-2xl bg-slate-900/10 p-2 shadow-inner h-[800px]">
+                        {/* Map Viewer Container */}
+                        <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative order-1">
+                            <MapViewer selectedLocation={selectedLocation} />
+                            {error && (
+                                <div className="absolute top-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] text-sm">
+                                    Live link disrupted. Falling back.
+                                </div>
+                            )}
+                            {loading && (
+                                <div className="absolute top-4 left-4 bg-blue-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] flex items-center text-sm">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    Updating telemetry...
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Advanced Tab Panels Container */}
+                        <div className="h-64 mt-6">
+                            {renderTab()}
+                        </div>
                     </div>
-                </div>
 
-                {/* Right Column (3) - Raw Pollutant Indicators */}
-                <div className="lg:col-span-3">
-                    <PollutantPanel data={data} loading={loading} />
-                </div>
+                    {/* Right Column (3) - Raw Pollutant Indicators */}
+                    <div className="lg:col-span-3">
+                        <PollutantPanel data={data} loading={loading} />
+                    </div>
 
-            </div>
+                </div>
+            )}
         </div>
     );
 }

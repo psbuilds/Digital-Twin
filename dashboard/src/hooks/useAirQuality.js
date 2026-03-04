@@ -15,16 +15,26 @@ export function useAirQuality(lat, lon, refreshInterval = 60000) {
             }
 
             try {
-                const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,ozone`;
-                const response = await fetch(url);
+                const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,ozone`;
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`;
 
-                if (!response.ok) {
-                    throw new Error('Failed to fetch air quality data');
+                const [aqRes, weatherRes] = await Promise.all([
+                    fetch(aqUrl),
+                    fetch(weatherUrl)
+                ]);
+
+                if (!aqRes.ok || !weatherRes.ok) {
+                    throw new Error('Failed to fetch data');
                 }
 
-                const result = await response.json();
+                const aqResult = await aqRes.json();
+                const weatherResult = await weatherRes.json();
+
                 if (isMounted) {
-                    setData(result.current);
+                    setData({
+                        ...aqResult.current,
+                        weather: weatherResult.current
+                    });
                     setLoading(false);
                     setError(null);
                 }

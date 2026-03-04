@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, send_from_directory
 import os
 import requests
 import sys
@@ -86,6 +86,22 @@ def get_heatmap():
         return jsonify(heatmap_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ml-results')
+def get_ml_results():
+    try:
+        log_path = os.path.join(PROJECT_ROOT, 'dashboard/static/images/ml_output.txt')
+        if os.path.exists(log_path):
+            with open(log_path, 'r') as f:
+                content = f.read()
+            return jsonify({'output': content})
+        return jsonify({'output': 'No output log found.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/static/images/<path:filename>')
+def serve_static_images(filename):
+    return send_from_directory(os.path.join(PROJECT_ROOT, 'dashboard/static/images'), filename)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5002)
