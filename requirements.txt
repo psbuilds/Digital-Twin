@@ -1,0 +1,18 @@
+flask
+earthengine-api
+google-auth
+
+# Data & ML
+numpy
+pandas
+scikit-learn
+joblib
+matplotlib
+
+# Optional / recommended ML libraries
+xgboost
+lightgbm
+
+# Utilities
+requests
+scipy

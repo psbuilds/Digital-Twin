@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kochi TWIN | Digital Twin AQI</title>
+    <!-- Cesium -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.108/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.108/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <!-- Main Header -->
+        <header class="main-header">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>Kochi <span>TWIN</span></h1>
+                    <div class="live-status">
+                        <span class="pulse"></span>
+                        LIVE TELEMETRY <span class="sync-info">SYNC: <span id="sync-time">--</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="data-source-badge">
+                    <span class="icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 2v20M2 12h20" />
+                        </svg>
+                    </span>
+                    Open-Meteo Live Data
+                </div>
+                <div class="location-switcher">
+                    <select id="locationSelect" class="node-select">
+                        <option value="">Switch Location...</option>
+                    </select>
+                </div>
+                <button id="refreshBtn" class="btn-refresh">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+            <div id="billing-alert" class="billing-alert hidden">
+                <span class="alert-icon">⚠️</span>
+                <span>Google API Billing Not Enabled. Using fallback simulation.</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="main-nav">
+            <button class="nav-item active" data-tab="observer">OBSERVER</button>
+            <button class="nav-item" data-tab="simulation">SIMULATION</button>
+            <button class="nav-item" data-tab="predictive">PREDICTIVE</button>
+            <button class="nav-item" data-tab="3dhub">3D HUB</button>
+        </nav>
+
+        <!-- Content Area -->
+        <main class="content-area">
+            <!-- Observer Tab Content -->
+            <div id="observer-view" class="tab-view active">
+                <div class="content-grid">
+                    <!-- Left Panel: Map/Cesium -->
+                    <section class="panel map-panel">
+                        <div class="panel-header">
+                            <span class="badge blue">LIVE INTERACTIVE</span>
+                            <h2 id="current-node-name">Loading...</h2>
+                            <p class="subtext">DYNAMIC GEOSPATIAL FEED</p>
+                        </div>
+                        <div id="cesiumContainerObserver" class="cesium-host"></div>
+                    </section>
+
+                    <!-- Right Panel: Data Analysis -->
+                    <section class="panel analysis-panel">
+                        <!-- Atmospheric DNA (Radar Chart) -->
+                        <div class="panel-section dna-section">
+                            <div class="section-header">
+                                <span class="badge light">DIGITAL TWIN LOGIC</span>
+                                <h2>Atmospheric DNA</h2>
+                                <p class="subtext">ENVIRONMENTAL INTERACTION MODEL</p>
+                            </div>
+
+                            <div class="metrics-row">
+                                <div class="metric">
+                                    <label>CONFIDENCE</label>
+                                    <span class="value">98.4%</span>
+                                </div>
+                                <div class="metric">
+                                    <label>ATMOS. ENTROPY</label>
+                                    <span class="value">0.42 J/K</span>
+                                </div>
+                                <div class="metric">
+                                    <label>SYNC LATENCY</label>
+                                    <span class="value" id="latency">12ms</span>
+                                </div>
+                            </div>
+
+                            <div class="radar-container">
+                                <canvas id="dnaRadarObserver"></canvas>
+                            </div>
+
+                            <div class="analysis-tag">COASTAL-V4.2 ANALYSIS NODE</div>
+                        </div>
+
+                        <!-- AQI Feed (Bar Chart) -->
+                        <div class="panel-section node-feed-section">
+                            <div class="node-header">
+                                <div class="node-title">
+                                    <h2 id="node-label">Synchronizing...</h2>
+                                    <p class="subtext">ACTIVE NODE FEED</p>
+                                </div>
+                                <div class="aqi-display">
+                                    <span class="aqi-value" id="main-aqi-value">--</span>
+                                    <span class="aqi-label">AQI INDEX</span>
+                                </div>
+                            </div>
+
+                            <div class="pollutant-bars">
+                                <!-- Bars will be rendered here -->
+                            </div>
+
+                            <div class="model-reasoning">
+                                <label>MODEL REASONING</label>
+                                <p>"Establishing live data link with Open-Meteo nodes..."</p>
+                            </div>
+
+                            <div class="footer-metrics">
+                                <div class="f-metric">
+                                    <label>HUMIDITY</label>
+                                    <span class="val" id="humidity-val">--%</span>
+                                </div>
+                                <div class="f-metric">
+                                    <label>WIND FLOW</label>
+                                    <span class="val" id="wind-val">-- km/h</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Simulation Tab Content -->
+            <div id="simulation-view" class="tab-view">
+                <div class="content-grid">
+                    <!-- Simulation Controls -->
+                    <section class="panel sim-controls-panel">
+                        <div class="panel-header">
+                            <span class="badge yellow">ACTIVE SIMULATION</span>
+                            <h2>Scenario Console</h2>
+                            <p class="subtext">WHAT-IF IMPACT ANALYSIS</p>
+                        </div>
+
+                        <div class="sim-scenarios">
+                            <div class="scenario-card">
+                                <h3>Traffic Density</h3>
+                                <input type="range" min="0" max="200" value="100" class="sim-slider" id="traffic-sim">
+                                <div class="slider-labels"><span>Low</span><span>Business as
+                                        Usual</span><span>Peak</span></div>
+                            </div>
+                            <div class="scenario-card">
+                                <h3>Industrial Output</h3>
+                                <input type="range" min="0" max="200" value="100" class="sim-slider" id="industry-sim">
+                                <div class="slider-labels"><span>Green</span><span>Standard</span><span>Surge</span>
+                                </div>
+                            </div>
+                            <div class="scenario-card">
+                                <h3>Forest Cover</h3>
+                                <input type="range" min="50" max="150" value="100" class="sim-slider" id="forest-sim">
+                                <div class="slider-labels">
+                                    <span>Deforestation</span><span>Current</span><span>Afforestation</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="sim-metrics">
+                            <div class="sim-metric-card">
+                                <label>ESTIMATED AQI DELTA</label>
+                                <span class="delta-val" id="aqi-delta">+0 %</span>
+                            </div>
+                            <div class="sim-metric-card">
+                                <label>HEALTH SAVINGS</label>
+                                <span class="delta-val" id="health-delta">$0.00</span>
+                            </div>
+                        </div>
+
+                        <button class="run-sim-btn">RECALCULATE DIGITAL TWIN</button>
+                    </section>
+
+                    <!-- Simulation Result Panel -->
+                    <section class="panel sim-result-panel">
+                        <div class="panel-section dna-section">
+                            <div class="section-header">
+                                <span class="badge light">SIMULATED LOGIC</span>
+                                <h2>Simulated DNA</h2>
+                                <p class="subtext">PREDICTED ENVIRONMENTAL STATE</p>
+                            </div>
+                            <div class="radar-container large">
+                                <canvas id="dnaRadarSim"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="panel-section impact-summary">
+                            <h3>Projected Health Impact</h3>
+                            <div class="impact-grid">
+                                <div class="impact-item">
+                                    <span class="label">Respiratory Risks</span>
+                                    <div class="impact-bar">
+                                        <div class="bar-fill" style="width: 30%"></div>
+                                    </div>
+                                </div>
+                                <div class="impact-item">
+                                    <span class="label">CO2 Sequestration</span>
+                                    <div class="impact-bar">
+                                        <div class="bar-fill blue" style="width: 60%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Other views placeholders -->
+            <div id="predictive-view" class="tab-view">
+                <div class="content-grid">
+                    <!-- Prediction Map -->
+                    <section class="panel map-panel">
+                        <div class="panel-header">
+                            <span class="badge purple">AI FORECAST HEATMAP</span>
+                            <h2>Kerala Air Quality Prediction</h2>
+                            <p class="subtext">REGIONAL IMPACT MODEL</p>
+                        </div>
+                        <div id="cesiumContainerPredictive" class="cesium-host"></div>
+
+                        <!-- Heatmap Legend -->
+                        <div class="map-legend">
+                            <div class="legend-title">µg/m³</div>
+                            <div class="legend-scale">
+                                <div class="l-item"><span class="c-box" style="background: #4a0404;"></span> > 250</div>
+                                <div class="l-item"><span class="c-box" style="background: #ef4444;"></span> 120-250
+                                </div>
+                                <div class="l-item"><span class="c-box" style="background: #f97316;"></span> 90-120
+                                </div>
+                                <div class="l-item"><span class="c-box" style="background: #f59e0b;"></span> 60-90</div>
+                                <div class="l-item"><span class="c-box" style="background: #84cc16;"></span> 30-60</div>
+                                <div class="l-item"><span class="c-box" style="background: #22c55e;"></span>
+                                    < 30</div>
+                                </div>
+                                <div class="legend-info">
+                                    <p>India 24h Standard: 60</p>
+                                    <p>WHO 24h Guideline: 25</p>
+                                </div>
+                            </div>
+                    </section>
+
+                    <!-- Prediction Details -->
+                    <section class="panel analysis-panel">
+                        <div class="panel-section prediction-stats"
+                            style="background: #f8fafc; border: none; box-shadow: none;">
+                            <div class="section-header">
+                                <span class="badge light" style="background: #eef2ff; color: #6366f1;">HORIZON
+                                    ANALYSIS</span>
+                                <h2 style="font-size: 42px;">Forecast Metrics</h2>
+                                <p class="subtext">TEMPORAL POLLUTANT TRENDS</p>
+                            </div>
+
+                            <div class="prediction-cards">
+                                <div class="p-card" data-horizon="1">
+                                    <div class="p-accent"></div>
+                                    <div class="p-content">
+                                        <label>T+1 HOUR</label>
+                                        <div class="p-val-row">
+                                            <span class="val" id="pred-1h">--</span>
+                                            <span class="unit">µg/m³</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="p-card" data-horizon="6">
+                                    <div class="p-accent"></div>
+                                    <div class="p-content">
+                                        <label>T+6 HOURS</label>
+                                        <div class="p-val-row">
+                                            <span class="val" id="pred-6h">--</span>
+                                            <span class="unit">µg/m³</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="p-card active" data-horizon="24">
+                                    <div class="p-accent"></div>
+                                    <div class="p-content">
+                                        <label>T+24 HOURS</label>
+                                        <div class="p-val-row">
+                                            <span class="val" id="pred-24h">--</span>
+                                            <span class="unit">µg/m³</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="p-card" data-horizon="168">
+                                    <div class="p-accent"></div>
+                                    <div class="p-content">
+                                        <label>T+1 WEEK</label>
+                                        <div class="p-val-row">
+                                            <span class="val" id="pred-168h">--</span>
+                                            <span class="unit">µg/m³</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="chart-container"
+                                style="height: 220px; margin-top: 30px; background: white; border-radius: 24px; padding: 20px;">
+                                <canvas id="predictionChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="panel-section model-info">
+                            <h3>Model Intelligence</h3>
+                            <div class="info-list">
+                                <div class="info-item">
+                                    <span class="label">Primary Model</span>
+                                    <span class="status">Gradient Boosted Forest</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Training Samples</span>
+                                    <span class="status">34,912 Hourly Records</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Confidence Score</span>
+                                    <span class="status green">High (92%)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+            <div id="3dhub-view" class="tab-view">
+                <div class="placeholder-msg">3D Data Hub - Coming Soon</div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/pollution_engine.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

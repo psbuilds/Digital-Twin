@@ -1,0 +1,17 @@
+export const keralaLocations = [
+    { id: 'tivm', name: "Thiruvananthapuram", district: "Thiruvananthapuram", lat: 8.5241, lon: 76.9366 },
+    { id: 'kol', name: "Kollam", district: "Kollam", lat: 8.8932, lon: 76.6141 },
+    { id: 'path', name: "Pathanamthitta", district: "Pathanamthitta", lat: 9.2648, lon: 76.7870 },
+    { id: 'alap', name: "Alappuzha", district: "Alappuzha", lat: 9.4981, lon: 76.3388 },
+    { id: 'kot', name: "Kottayam", district: "Kottayam", lat: 9.5916, lon: 76.5222 },
+    { id: 'idu', name: "Idukki", district: "Idukki", lat: 9.8500, lon: 76.9500 },
+    { id: 'ern', name: "Ernakulam", district: "Ernakulam", lat: 9.9816, lon: 76.2999 },
+    { id: 'koch', name: "Kochi", district: "Ernakulam", lat: 9.9312, lon: 76.2673 },
+    { id: 'thr', name: "Thrissur", district: "Thrissur", lat: 10.5276, lon: 76.2144 },
+    { id: 'pal', name: "Palakkad", district: "Palakkad", lat: 10.7867, lon: 76.6548 },
+    { id: 'mal', name: "Malappuram", district: "Malappuram", lat: 11.0733, lon: 76.0740 },
+    { id: 'koz', name: "Kozhikode", district: "Kozhikode", lat: 11.2588, lon: 75.7804 },
+    { id: 'way', name: "Wayanad", district: "Wayanad", lat: 11.6854, lon: 76.1320 },
+    { id: 'kan', name: "Kannur", district: "Kannur", lat: 11.8745, lon: 75.3704 },
+    { id: 'kas', name: "Kasaragod", district: "Kasaragod", lat: 12.4996, lon: 74.9869 },
+];
