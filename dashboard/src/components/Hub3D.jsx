@@ -29,7 +29,7 @@ function PollutionSpike({ position, height, color }) {
 export function Hub3D({ data }) {
     // Generate pseudo-3D data to demonstrate Kerala terrain spikes
     // Based on current data point (simulating 10 points)
-    const aqiBase = data ? Math.max((data.pm2_5 || 0), (data.pm10 || 0)) : 40;
+    const aqiBase = data ? Math.max((data.pm2p5 || 0), (data.pm10 || 0)) : 40;
 
     const nodes = useMemo(() => {
         return Array.from({ length: 8 }).map((_, i) => {

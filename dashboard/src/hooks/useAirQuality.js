@@ -31,8 +31,15 @@ export function useAirQuality(lat, lon, refreshInterval = 60000) {
                 const weatherResult = await weatherRes.json();
 
                 if (isMounted) {
+                    // Map Open-Meteo fields to required keys
+                    const current = aqResult.current;
                     setData({
-                        ...aqResult.current,
+                        pm2p5: current.pm2_5,
+                        pm10: current.pm10,
+                        co: current.carbon_monoxide !== null ? current.carbon_monoxide / 1000 : null, // Convert µg/m³ to mg/m³
+                        no2: current.nitrogen_dioxide,
+                        go3: current.ozone,
+                        so2: current.sulphur_dioxide,
                         weather: weatherResult.current
                     });
                     setLoading(false);

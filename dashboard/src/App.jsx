@@ -7,16 +7,40 @@ import { SyncNodes } from './components/SyncNodes';
 import { PredictivePanel } from './components/PredictivePanel';
 import { Hub3D } from './components/Hub3D';
 import { HeatmapSection } from './components/HeatmapSection';
-import { useAirQuality } from './hooks/useAirQuality';
 import { keralaLocations } from './data/keralaLocations';
 import { Cloud, Radio } from 'lucide-react';
 
 function App() {
     const [selectedLocation, setSelectedLocation] = useState(keralaLocations.find(l => l.id === 'koch'));
-    const { data, loading, error } = useAirQuality(selectedLocation.lat, selectedLocation.lon);
+    const [nodes, setNodes] = useState([]);
+    const [syncLoading, setSyncLoading] = useState(true);
+    const [syncError, setSyncError] = useState(null);
 
     // Track refresh cycles for components that need triggering
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Fetch all nodes for heatmap
+    useEffect(() => {
+        const fetchAllNodes = async () => {
+            setSyncLoading(true);
+            try {
+                const response = await fetch('/api/live-aqi');
+                const result = await response.json();
+                if (result.nodes && result.nodes.length > 0) {
+                    setNodes(result.nodes);
+                    setSyncError(null);
+                } else {
+                    setSyncError("Failed to fetch live AQI nodes");
+                }
+            } catch (err) {
+                console.error("Failed to fetch all nodes:", err);
+                setSyncError(err.message);
+            } finally {
+                setSyncLoading(false);
+            }
+        };
+        fetchAllNodes();
+    }, [refreshKey]);
 
     // Poll intervals
     useEffect(() => {
@@ -26,14 +50,33 @@ function App() {
         return () => clearInterval(interval);
     }, []);
 
+    const currentNode = nodes.find(n => Math.abs(n.lat - selectedLocation.lat) < 0.01 && Math.abs(n.lon - selectedLocation.lon) < 0.01);
+
+    const currentData = currentNode ? {
+        pm2p5: currentNode.pollutants.pm25,
+        pm10: currentNode.pollutants.pm10,
+        co: currentNode.pollutants.co,
+        no2: currentNode.pollutants.no2,
+        go3: currentNode.pollutants.o3,
+        so2: currentNode.pollutants.so2,
+        weather: {
+            temperature_2m: parseFloat(currentNode.metrics.temp),
+            relative_humidity_2m: parseFloat(currentNode.metrics.humidity),
+            wind_speed_10m: parseFloat(currentNode.metrics.wind)
+        }
+    } : null;
+
+    const currentLoading = syncLoading;
+    const currentError = syncError;
+
     const [activeTab, setActiveTab] = useState('predictive');
 
     const renderTab = () => {
         switch (activeTab) {
-            case 'predictive': return <PredictivePanel data={data} />;
-            case '3dhub': return <Hub3D data={data} />;
+            case 'predictive': return <PredictivePanel data={currentData} location={selectedLocation} />;
+            case '3dhub': return <Hub3D data={currentData} />;
             case 'heatmap': return <HeatmapSection />;
-            default: return <PredictivePanel data={data} />;
+            default: return <PredictivePanel data={currentData} location={selectedLocation} />;
         }
     };
 
@@ -87,21 +130,21 @@ function App() {
                             selectedLocation={selectedLocation}
                             onSelect={setSelectedLocation}
                         />
-                        <AtmosphericDNA data={data} />
-                        <SyncNodes refreshKey={refreshKey} />
+                        <AtmosphericDNA data={currentData} />
+                        <SyncNodes refreshKey={refreshKey} nodes={nodes} />
                     </div>
 
                     {/* Center Column (6) - Primary Display Hub (Map & Advanced Features) */}
                     <div className="lg:col-span-6 flex flex-col space-y-6 border border-slate-800/50 rounded-2xl bg-slate-900/10 p-2 shadow-inner h-[800px]">
                         {/* Map Viewer Container */}
                         <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative order-1">
-                            <MapViewer selectedLocation={selectedLocation} />
-                            {error && (
+                            <MapViewer selectedLocation={selectedLocation} nodes={nodes} />
+                            {currentError && (
                                 <div className="absolute top-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] text-sm">
                                     Live link disrupted. Falling back.
                                 </div>
                             )}
-                            {loading && (
+                            {currentLoading && (
                                 <div className="absolute top-4 left-4 bg-blue-500/90 text-white px-4 py-2 rounded shadow-lg z-[1000] flex items-center text-sm">
                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                                     Updating telemetry...
@@ -117,7 +160,7 @@ function App() {
 
                     {/* Right Column (3) - Raw Pollutant Indicators */}
                     <div className="lg:col-span-3">
-                        <PollutantPanel data={data} loading={loading} />
+                        <PollutantPanel data={currentData} loading={currentLoading} />
                     </div>
 
                 </div>

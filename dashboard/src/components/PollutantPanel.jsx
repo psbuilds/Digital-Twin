@@ -3,11 +3,11 @@ import { Activity } from 'lucide-react';
 
 const limits = {
     pm10: 100, // µg/m³
-    pm2_5: 60,
-    nitrogen_dioxide: 80,
-    sulphur_dioxide: 80,
-    carbon_monoxide: 4, // modified scale for UI visually
-    ozone: 100
+    pm2p5: 60,
+    no2: 80,
+    so2: 80,
+    co: 4, // modified scale for UI visually
+    go3: 100
 };
 
 export function PollutantPanel({ data, loading }) {
@@ -54,12 +54,12 @@ export function PollutantPanel({ data, loading }) {
                 <h2 className="text-lg">Live Pollutant Metrics</h2>
             </div>
             <div>
-                {renderBar('PM2.5', 'pm2_5', data.pm2_5, 'µg/m³', limits.pm2_5)}
+                {renderBar('PM2.5', 'pm2p5', data.pm2p5, 'µg/m³', limits.pm2p5)}
                 {renderBar('PM10', 'pm10', data.pm10, 'µg/m³', limits.pm10)}
-                {renderBar('NO2', 'nitrogen_dioxide', data.nitrogen_dioxide, 'µg/m³', limits.nitrogen_dioxide)}
-                {renderBar('SO2', 'sulphur_dioxide', data.sulphur_dioxide, 'µg/m³', limits.sulphur_dioxide)}
-                {renderBar('CO', 'carbon_monoxide', data.carbon_monoxide, 'µg/m³', limits.carbon_monoxide)}
-                {renderBar('O3', 'ozone', data.ozone, 'µg/m³', limits.ozone)}
+                {renderBar('NO2', 'no2', data.no2, 'µg/m³', limits.no2)}
+                {renderBar('SO2', 'so2', data.so2, 'µg/m³', limits.so2)}
+                {renderBar('CO', 'co', data.co, 'mg/m³', limits.co)}
+                {renderBar('O3', 'go3', data.go3, 'µg/m³', limits.go3)}
             </div>
         </div>
     );

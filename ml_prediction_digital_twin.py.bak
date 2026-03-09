@@ -1,0 +1,242 @@
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+from shapely.geometry import Point
+from sklearn.model_selection import train_test_split
+from sklearn.multioutput import MultiOutputRegressor
+from xgboost import XGBRegressor
+from sklearn.metrics import r2_score
+import folium
+from folium.plugins import HeatMap
+import os
+import sys
+import io
+import matplotlib.pyplot as plt
+import joblib
+import json
+from scipy.interpolate import griddata
+
+# Capture output
+output_capture = io.StringIO()
+sys.stdout = output_capture
+# =========================================
+DATA_FILE = 'ml/merged_hourly_data.csv'
+BOUNDARY_FILE = 'dashboard/static/data/kerala_districts.json'
+
+# Save outputs to dashboard static folder so Flask can serve them
+OUTPUT_DIR = 'dashboard/static/images'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+OUTPUT_MAP = os.path.join(OUTPUT_DIR, 'aqi_heatmap_interactive.html')
+# We will generate TWO static images now
+OUTPUT_IMG_ACTUAL = os.path.join(OUTPUT_DIR, 'aqi_heatmap_actual.png')
+OUTPUT_IMG_PRED = os.path.join(OUTPUT_DIR, 'aqi_heatmap_predicted.png')
+OUTPUT_LOG = os.path.join(OUTPUT_DIR, 'ml_output.txt')
+MODEL_PATH = 'ml/statewide_model.joblib'
+# =========================================
+if not os.path.exists(DATA_FILE):
+    DATA_FILE = 'merged_hourly_data.csv'
+
+print(f"Loading data from {DATA_FILE}...")
+df = pd.read_csv(DATA_FILE)
+# =========================================
+pollutant_cols = ['pm2p5', 'pm10', 'co', 'no2', 'go3', 'so2']
+if df[pollutant_cols].max().max() < 1e-3:
+    print("Detected units in kg/m^3. Scaling to mg/m^3...")
+    for col in pollutant_cols:
+        df[col] = df[col] * 1e6 
+# =========================================
+df['time'] = pd.to_datetime(df['time'], dayfirst=True)
+df['hour'] = df['time'].dt.hour
+df['day'] = df['time'].dt.day
+df['month'] = df['time'].dt.month
+df['dayofweek'] = df['time'].dt.dayofweek
+
+# We'll calculate Final_AQI for the input data too
+def subindex(conc, breakpoints):
+    for Clow, Chigh, Ilow, Ihigh in breakpoints:
+        if conc <= Chigh:
+            return ((Ihigh - Ilow)/(Chigh - Clow)) * (conc - Clow) + Ilow
+    return 500
+
+pm25_bp = [(0,30,0,50),(30,60,50,100),(60,90,100,200),(90,120,200,300),(120,250,300,400),(250,500,400,500)]
+pm10_bp = [(0,50,0,50),(50,100,50,100),(100,250,100,200),(250,350,200,300),(350,430,300,400),(430,600,400,500)]
+no2_bp = [(0,40,0,50),(40,80,50,100),(80,180,100,200),(180,280,200,300),(280,400,300,400),(400,800,400,500)]
+o3_bp = [(0,50,0,50),(50,100,50,100),(100,168,100,200),(168,208,200,300),(208,748,300,400),(748,1000,400,500)]
+co_bp = [(0,1,0,50),(1,2,50,100),(2,10,100,200),(10,17,200,300),(17,34,300,400),(34,50,400,500)]
+so2_bp = [(0,40,0,50),(40,80,50,100),(80,380,100,200),(380,800,200,300),(800,1600,300,400),(1600,2000,400,500)]
+
+df['AQI_PM25'] = df['pm2p5'].apply(lambda x: subindex(x, pm25_bp))
+df['AQI_PM10'] = df['pm10'].apply(lambda x: subindex(x, pm10_bp))
+df['AQI_NO2'] = df['no2'].apply(lambda x: subindex(x, no2_bp))
+df['AQI_O3'] = df['go3'].apply(lambda x: subindex(x, o3_bp))
+df['AQI_CO'] = df['co'].apply(lambda x: subindex(x, co_bp))
+df['AQI_SO2'] = df['so2'].apply(lambda x: subindex(x, so2_bp))
+df['Final_AQI'] = df[['AQI_PM25','AQI_PM10','AQI_NO2','AQI_O3','AQI_CO','AQI_SO2']].max(axis=1)
+
+# Drop time after engineering
+train_df = df.drop(columns=['time'])
+# =========================================
+features = ['latitude','longitude','u10','v10','t2m','sst','tp','hour','day','month','dayofweek']
+targets = ['pm2p5','pm10','co','no2','go3','so2']
+
+train_df = train_df.fillna(train_df.mean())
+X = train_df[features]
+y = train_df[targets]
+
+# Split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+print("Training XGBoost MultiOutputRegressor model...")
+xgb = XGBRegressor(n_estimators=200, max_depth=6, learning_rate=0.1, objective='reg:squarederror')
+model = MultiOutputRegressor(xgb)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+score = r2_score(y_test, y_pred)
+print("Model R2 Score:", score)
+
+# Save model for live prediction
+print(f"Saving model to {MODEL_PATH}...")
+joblib.dump({
+    'model': model,
+    'features': features,
+    'targets': targets,
+    'r2_score': score
+}, MODEL_PATH)
+
+# =========================================
+print("Loading Kerala boundary from local districts file...")
+try:
+    kerala_districts = gpd.read_file(BOUNDARY_FILE)
+    kerala_boundary = kerala_districts.dissolve(by='ST_NM')
+    kerala_geom = kerala_boundary.geometry.iloc[0]
+except Exception as e:
+    print(f"Error loading local boundary: {e}. Using bounding box.")
+    kerala_geom = None
+
+# =========================================
+print("Creating high-resolution dense grid for prediction...")
+lat_min, lat_max = 8.0, 12.8
+lon_min, lon_max = 74.5, 77.5
+grid_res = 0.02  # Higher resolution for "proper" heatmap (approx 2km)
+lat_vals = np.arange(lat_min, lat_max, grid_res)
+lon_vals = np.arange(lon_min, lon_max, grid_res)
+
+grid_points = [(lat, lon) for lat in lat_vals for lon in lon_vals]
+grid_df = pd.DataFrame(grid_points, columns=['latitude','longitude'])
+
+geometry = [Point(xy) for xy in zip(grid_df['longitude'], grid_df['latitude'])]
+grid_gdf = gpd.GeoDataFrame(grid_df, geometry=geometry, crs="EPSG:4326")
+
+if kerala_geom:
+    grid_gdf = grid_gdf[grid_gdf.within(kerala_geom)]
+    print(f"Points inside Kerala: {len(grid_gdf)}")
+
+# Use mean atmospheric features for the static snapshot prediction
+for col in ['u10','v10','t2m','sst','tp', 'hour','day','month','dayofweek']:
+    grid_gdf[col] = train_df[col].mean()
+
+print("Predicting pollutants for grid points...")
+grid_pred = model.predict(grid_gdf[features])
+pred_df = pd.DataFrame(grid_pred, columns=targets).clip(lower=0)
+pred_df['latitude'] = grid_gdf['latitude'].values
+pred_df['longitude'] = grid_gdf['longitude'].values
+
+# Calculate AQI for grid
+pred_df['AQI_PM25'] = pred_df['pm2p5'].apply(lambda x: subindex(x, pm25_bp))
+pred_df['AQI_PM10'] = pred_df['pm10'].apply(lambda x: subindex(x, pm10_bp))
+pred_df['AQI_NO2'] = pred_df['no2'].apply(lambda x: subindex(x, no2_bp))
+pred_df['AQI_O3'] = pred_df['go3'].apply(lambda x: subindex(x, o3_bp))
+pred_df['AQI_CO'] = pred_df['co'].apply(lambda x: subindex(x, co_bp))
+pred_df['AQI_SO2'] = pred_df['so2'].apply(lambda x: subindex(x, so2_bp))
+pred_df['Final_AQI'] = pred_df[['AQI_PM25','AQI_PM10','AQI_NO2','AQI_O3','AQI_CO','AQI_SO2']].max(axis=1)
+
+# =========================================
+def save_heatmap(data, path, title, is_actual=False):
+    plt.figure(figsize=(10, 12), facecolor='#0f172a')
+    ax = plt.gca()
+    ax.set_facecolor('#0f172a')
+    
+    if kerala_geom:
+        kerala_districts.plot(ax=ax, color='#1e293b', edgecolor='#334155', alpha=0.8, linewidth=0.5)
+    
+    if is_actual:
+        # For actual, we show the measurement points as bubbles
+        scatter = ax.scatter(data['longitude'], data['latitude'], c=data['Final_AQI'], 
+                            cmap='RdYlGn_r', s=15, alpha=0.6, edgecolors='none')
+        plt.title(f'{title}\n(Observed Sensor Data Points)', color='white', fontsize=14, pad=20)
+    else:
+        # For predicted, we use interpolation to make it look "proper"
+        xi = np.linspace(lon_min, lon_max, 200)
+        yi = np.linspace(lat_min, lat_max, 200)
+        zi = griddata((data['longitude'], data['latitude']), data['Final_AQI'], (xi[None,:], yi[:,None]), method='linear')
+        
+        # Mask using boundary
+        if kerala_geom:
+            import matplotlib.path as mpath
+            from shapely.geometry import mapping
+            # Simple bounding box masking for speed in this context
+            im = ax.imshow(zi, extent=(lon_min, lon_max, lat_min, lat_max), origin='lower', cmap='RdYlGn_r', alpha=0.9, aspect='auto')
+        else:
+            im = ax.imshow(zi, extent=(lon_min, lon_max, lat_min, lat_max), origin='lower', cmap='RdYlGn_r', alpha=0.9, aspect='auto')
+        
+        plt.title(f'{title}\n(XGBoost Model Prediction)', color='white', fontsize=14, pad=20)
+        scatter = im
+
+    cbar = plt.colorbar(scatter, ax=ax, label='Final AQI')
+    cbar.set_label('Final AQI', color='white')
+    cbar.ax.yaxis.set_tick_params(color='white')
+    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color='white')
+    
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values(): spine.set_color('#334155')
+    plt.xlabel('Longitude', color='white')
+    plt.ylabel('Latitude', color='white')
+    plt.savefig(path, dpi=300, bbox_inches='tight', transparent=True)
+    plt.close()
+
+print(f"Generating Actual AQI heatmap...")
+# Use unique lat/lon points from training data for the 'actual' map
+actual_spatial = df.groupby(['latitude', 'longitude'])['Final_AQI'].mean().reset_index()
+save_heatmap(actual_spatial, OUTPUT_IMG_ACTUAL, "Kerala AQI: Ground Truth", is_actual=True)
+
+print(f"Generating Predicted AQI heatmap...")
+save_heatmap(pred_df, OUTPUT_IMG_PRED, "Kerala AQI: Spatial Forecast")
+
+# ALSO SAVE Interactive Folium Map
+m = folium.Map(location=[10.5, 76.5], zoom_start=7, tiles='cartodbpositron')
+if kerala_geom:
+    folium.GeoJson(kerala_districts, name="Districts").add_to(m)
+HeatMap([[r['latitude'], r['longitude'], r['Final_AQI']/pred_df['Final_AQI'].max()] for _, r in pred_df.iterrows()], 
+        radius=15, blur=10).add_to(m)
+m.save(OUTPUT_MAP)
+
+# =========================================
+print("Calculating hourly forecast JSON...")
+hourly_trends = []
+for h in range(24):
+    temp_grid = grid_gdf.copy()
+    temp_grid['hour'] = h
+    h_pred = model.predict(temp_grid[features])
+    h_df = pd.DataFrame(h_pred, columns=targets).clip(lower=0)
+    h_df['AQI_PM25'] = h_df['pm2p5'].apply(lambda x: subindex(x, pm25_bp))
+    # ... other pollutants skipped for mean calculation speed, using PM2.5 as proxy for trend scale
+    mean_aqi = h_df['AQI_PM25'].mean()
+    hourly_trends.append(mean_aqi)
+
+OUTPUT_JSON = os.path.join(OUTPUT_DIR, 'aqi_hourly_forecast.json')
+with open(OUTPUT_JSON, 'w') as f:
+    json.dump({
+        'hours': list(range(24)),
+        'aqi_values': [round(v, 2) for v in hourly_trends],
+        'model_r2': round(float(score), 4),
+        'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+    }, f)
+
+print("Done!")
+# Restore stdout and save log
+sys.stdout = sys.__stdout__
+with open(OUTPUT_LOG, 'w') as f:
+    f.write(output_capture.getvalue())
+print(output_capture.getvalue())

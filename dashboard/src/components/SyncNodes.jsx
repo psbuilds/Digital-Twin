@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCcw } from 'lucide-react';
 
-export function SyncNodes({ refreshKey }) {
+export function SyncNodes({ refreshKey, nodes = [] }) {
     const [latency, setLatency] = useState(0);
     const [trend, setTrend] = useState('Stable');
     const [trendColor, setTrendColor] = useState('text-yellow-400');
@@ -32,7 +32,7 @@ export function SyncNodes({ refreshKey }) {
             <div className="space-y-4 font-mono">
                 <div className="flex justify-between border-b border-slate-700 pb-2">
                     <span className="text-slate-400">Active Sensors</span>
-                    <span className="text-white font-bold">14 / 21</span>
+                    <span className="text-white font-bold">{nodes.length} / 15</span>
                 </div>
                 <div className="flex justify-between border-b border-slate-700 pb-2">
                     <span className="text-slate-400">Sync Latency</span>

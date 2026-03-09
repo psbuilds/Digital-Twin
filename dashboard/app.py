@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory, request
 import os
 import requests
 import sys
@@ -12,6 +12,7 @@ sys.path.append(str(PROJECT_ROOT))
 sys.path.append(str(PROJECT_ROOT / "ml"))
 
 import predict_future_aqi
+import live_predictor
 from aqi_logic.current_aqi_rules import calculate_overall_aqi
 from aqi_logic.status_mapping import get_aqi_status
 from aqi_logic.open_meteo_fetcher import OpenMeteoAQIFetcher
@@ -70,7 +71,7 @@ def get_live_aqi():
 
 @app.route('/api/predictions')
 def get_predictions():
-    pollutant = requests.args.get('pollutant', 'pm2p5')
+    pollutant = request.args.get('pollutant', 'pm2p5')
     try:
         preds = predict_future_aqi.predict_horizons(pollutant)
         return jsonify(preds)
@@ -79,11 +80,27 @@ def get_predictions():
 
 @app.route('/api/heatmap')
 def get_heatmap():
-    pollutant = requests.args.get('pollutant', 'pm2p5')
-    horizon = int(requests.args.get('horizon', 24))
+    pollutant = request.args.get('pollutant', 'pm2p5')
+    horizon = int(request.args.get('horizon', 24))
     try:
         heatmap_data = predict_future_aqi.generate_district_forecasts(pollutant, horizon)
         return jsonify(heatmap_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/live-prediction')
+def get_live_prediction():
+    try:
+        lat = float(request.args.get('lat', 9.9312))
+        lon = float(request.args.get('lon', 76.2673))
+        # Use location data for meteorology context
+        weather_data = open_meteo_fetcher.fetch_location_data(lat, lon)
+        metrics = weather_data.get('metrics') if weather_data else None
+        
+        forecast = live_predictor.predictor.predict_forecast(lat, lon, metrics)
+        if forecast:
+            return jsonify(forecast)
+        return jsonify({'error': 'Model not available'}), 503
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

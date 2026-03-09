@@ -1,16 +1,33 @@
 import requests
 import json
+import time
 from datetime import datetime
 
 class OpenMeteoAQIFetcher:
     def __init__(self):
         self.aq_base_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
         self.weather_base_url = "https://api.open-meteo.com/v1/forecast"
+        
+        self._cached_nodes = None
+        self._last_fetch_time = 0
+        self._cache_duration = 55 # 55 seconds
 
     def fetch_location_data(self, lat, lon):
         """
         Fetches air quality and weather data for a specific latitude and longitude using Open-Meteo.
         """
+        # Try to use cached batch data first to save API calls
+        all_nodes = self.fetch_all_nodes_data()
+        for node in all_nodes:
+            if abs(node['lat'] - lat) < 0.01 and abs(node['lon'] - lon) < 0.01:
+                return {
+                    'pollutants': node['pollutants'],
+                    'metrics': node['metrics'],
+                    'sync_time': node['sync_time'],
+                    'raw_aq': {},
+                    'raw_weather': {}
+                }
+
         aq_params = {
             "latitude": lat,
             "longitude": lon,
@@ -68,6 +85,11 @@ class OpenMeteoAQIFetcher:
         """
         Fetches air quality and weather data for all Kerala locations in batch.
         """
+        current_time = time.time()
+        if self._cached_nodes and (current_time - self._last_fetch_time < self._cache_duration):
+            print("Returning cached Open-Meteo batch data...")
+            return self._cached_nodes
+
         locations = self.get_kerala_locations()
         lats = ",".join([str(loc['lat']) for loc in locations])
         lons = ",".join([str(loc['lon']) for loc in locations])
@@ -135,6 +157,8 @@ class OpenMeteoAQIFetcher:
                     'sync_time': aq_data.get('time', datetime.now().isoformat())
                 })
             
+            self._cached_nodes = final_nodes
+            self._last_fetch_time = time.time()
             return final_nodes
             
         except Exception as e:
