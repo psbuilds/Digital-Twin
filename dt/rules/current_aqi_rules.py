@@ -131,6 +131,41 @@ def apply_coastal_sea_breeze(state: TwinState, features: Dict, effects: Dict):
         "coastal": True
     }
 
+def apply_traffic_emissions(state: TwinState, features: Dict, effects: Dict):
+    traffic = features.get("traffic_activity_index", 0.5)
+    if traffic <= 0.5:
+        return
+
+    factor = clamp_factor(1.0 + 0.15 * traffic)
+
+    for p in ("pm25", "no2", "co"):
+        before = getattr(state, p)
+        after = before * factor
+        setattr(state, p, after)
+        _record(effects, p, "traffic_emissions", after - before)
+
+    state.metadata.setdefault("rule_reasons", {})["traffic_emissions"] = {
+        "traffic_activity_index": traffic
+    }
+
+def apply_night_accumulation(state: TwinState, features: Dict, effects: Dict):
+    night_acc = features.get("night_accumulation_index", 0.0)
+    if night_acc <= 0:
+        return
+
+    factor = clamp_factor(1.0 + 0.1 * night_acc)
+
+    for p in ("pm25", "pm10", "co"):
+        before = getattr(state, p)
+        after = before * factor
+        setattr(state, p, after)
+        _record(effects, p, "night_accumulation", after - before)
+
+    state.metadata.setdefault("rule_reasons", {})["night_accumulation"] = {
+        "night_accumulation_index": night_acc
+    }
+
+
 
 # CPCB AQI COMPUTATION
 def compute_sub_index(value: float, breakpoints):
@@ -212,6 +247,8 @@ RULE_PIPELINE = [
     apply_stagnant_accumulation,
     apply_temperature_ozone_effect,
     apply_coastal_sea_breeze,
+    apply_traffic_emissions,
+    apply_night_accumulation,
 ]
 
 

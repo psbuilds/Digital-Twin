@@ -125,7 +125,7 @@ export function MapViewer({ selectedLocation, nodes = [] }) {
                                     <span className="text-slate-600 font-medium">AQI Value:</span>
                                     <span className="font-bold" style={{ color: getAqiColor(node.aqi) }}>{Math.round(node.aqi)}</span>
                                 </div>
-                                <div className="text-[10px] text-slate-400 mt-1 italic">
+                                <div className="text-[10px] text-slate-600 mt-1 italic">
                                     Telemetry: {node.status || 'Active'}
                                 </div>
                             </div>

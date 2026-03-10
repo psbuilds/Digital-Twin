@@ -125,12 +125,16 @@ def get_dt_insights():
         m = live_data['metrics']
         
         # Initialize TwinState
+        # Convert km/h to m/s for DT engine: 1 km/h = 1/3.6 m/s
+        base_wind_kmh = float(m['wind'].split()[0]) if 'N/A' not in m['wind'] else 5.4 
+        base_wind_ms = base_wind_kmh / 3.6
+        
         state = TwinState(
             grid_id=f"node_{lat}_{lon}",
             timestamp=datetime.now(),
             latitude=lat,
             longitude=lon,
-            wind_speed=float(m['wind'].split()[0]) if 'N/A' not in m['wind'] else 1.5,
+            wind_speed=base_wind_ms,
             wind_direction=270.0, # Defaulting if unknown
             temperature=float(m['temp'].replace('°C','')) if 'N/A' not in m['temp'] else 29.0,
             precipitation=float(m.get('precip', 0.0)),
@@ -149,7 +153,16 @@ def get_dt_insights():
         
         # We simulate 24 hours. The forecast usually starts from actual hour.
         for i in range(24):
-            weather_input = forecast_data[i] if forecast_data and i < len(forecast_data) else None
+            weather_input = None
+            if forecast_data and i < len(forecast_data):
+                f = forecast_data[i]
+                weather_input = {
+                    'temp': f['temp'],
+                    'wind_speed': f['wind_speed'] / 3.6, # Convert to m/s
+                    'wind_direction': f['wind_direction'],
+                    'precip': f['precip']
+                }
+            
             current_state, report = update_state(current_state, weather_input=weather_input)
             
             history.append({

@@ -4,18 +4,18 @@
 
 @layer base {
     body {
-        @apply bg-background text-white;
+        @apply bg-background text-slate-800;
     }
 }
 
-/* Base leaflet overrides for dark map */
+/* Base leaflet overrides */
 .leaflet-layer,
 .leaflet-control-zoom-in,
 .leaflet-control-zoom-out,
 .leaflet-control-attribution {
-    filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    /* removed invert filter to keep map light */
 }
 
 .custom-popup {
-    filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    /* removed invert filter */
 }

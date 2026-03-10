@@ -83,7 +83,7 @@ function App() {
     };
 
     return (
-        <div className="min-h-screen bg-background border-t-4 border-blue-500 font-sans p-6 text-slate-200">
+        <div className="min-h-screen bg-background border-t-4 border-blue-500 font-sans p-6 text-slate-800">
 
             {/* Top Navigation / Header */}
             <header className="flex justify-between items-center bg-surface p-4 rounded-xl shadow-lg border border-border mb-6">
@@ -95,7 +95,7 @@ function App() {
                         <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
                             Digital Twin Kerala AQI
                         </h1>
-                        <p className="text-xs text-slate-400 flex items-center mt-1">
+                        <p className="text-xs text-slate-600 flex items-center mt-1">
                             <Radio size={12} className="mr-1 text-emerald-400 animate-pulse" />
                             Telemetry Online • Data Live Synchronizing
                         </p>
@@ -109,7 +109,7 @@ function App() {
                             onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === tab
                                 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)] text-white'
-                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                         >
                             {tab === 'digitaltwin' ? 'Twin Insights' : tab.charAt(0).toUpperCase() + tab.slice(1).replace('hub', ' Hub')}
@@ -137,7 +137,7 @@ function App() {
                     </div>
 
                     {/* Center Column (6) - Primary Display Hub (Map & Advanced Features) */}
-                    <div className="lg:col-span-6 flex flex-col space-y-6 border border-slate-800/50 rounded-2xl bg-slate-900/10 p-2 shadow-inner h-[800px]">
+                    <div className="lg:col-span-6 flex flex-col space-y-6 border border-slate-200/50 rounded-2xl bg-slate-50/10 p-2 shadow-inner h-[800px]">
                         {/* Map Viewer Container */}
                         <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative order-1">
                             <MapViewer selectedLocation={selectedLocation} nodes={nodes} />

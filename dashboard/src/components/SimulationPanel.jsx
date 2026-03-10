@@ -12,11 +12,11 @@ export function SimulationPanel() {
                 <h2 className="text-lg">AQI Dispersion Simulation</h2>
             </div>
 
-            <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-4 mb-4 relative overflow-hidden flex items-center justify-center">
+            <div className="flex-1 bg-slate-50 rounded-lg border border-slate-300 p-4 mb-4 relative overflow-hidden flex items-center justify-center">
                 {/* Mock Heatmap visualization container */}
                 <div className="text-center opacity-50 z-10">
                     <Wind size={48} className="mx-auto text-indigo-500 animate-pulse mb-3" />
-                    <p className="text-sm font-mono text-slate-300">Dispersion active layer</p>
+                    <p className="text-sm font-mono text-slate-700">Dispersion active layer</p>
                     <p className="text-xs text-slate-500">Overlay applied to Kerala Topology</p>
                 </div>
 
@@ -33,26 +33,26 @@ export function SimulationPanel() {
 
             <div className="space-y-4">
                 <div>
-                    <label className="flex justify-between text-sm text-slate-400 mb-1">
+                    <label className="flex justify-between text-sm text-slate-600 mb-1">
                         <span className="flex items-center"><Clock size={14} className="mr-1" /> Time Horizon (+{hourStart}h)</span>
                         <span>24h Max</span>
                     </label>
                     <input
                         type="range" min="0" max="24" step="1"
                         value={hourStart} onChange={(e) => setHourStart(Number(e.target.value))}
-                        className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                     />
                 </div>
 
                 <div>
-                    <label className="flex justify-between text-sm text-slate-400 mb-1">
+                    <label className="flex justify-between text-sm text-slate-600 mb-1">
                         <span>Wind Speed (km/h)</span>
                         <span>{windSpeed}</span>
                     </label>
                     <input
                         type="range" min="0" max="50" step="1"
                         value={windSpeed} onChange={(e) => setWindSpeed(Number(e.target.value))}
-                        className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                     />
                 </div>
             </div>

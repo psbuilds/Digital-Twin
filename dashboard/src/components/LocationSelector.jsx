@@ -15,7 +15,7 @@ export function LocationSelector({ selectedLocation, onSelect }) {
                 </label>
                 <select
                     id="location-select"
-                    className="bg-[#0f172a] border border-border text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 transition-colors"
+                    className="bg-white border border-border text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 transition-colors"
                     value={selectedLocation ? selectedLocation.id : ''}
                     onChange={(e) => {
                         const loc = keralaLocations.find(l => l.id === e.target.value);
@@ -28,7 +28,7 @@ export function LocationSelector({ selectedLocation, onSelect }) {
                         </option>
                     ))}
                 </select>
-                <div className="text-xs text-slate-400 mt-2">
+                <div className="text-xs text-slate-600 mt-2">
                     {selectedLocation && `Coords: [${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lon.toFixed(4)}]`}
                 </div>
             </div>

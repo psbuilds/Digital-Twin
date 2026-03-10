@@ -89,7 +89,7 @@ export function PredictivePanel({ data, location }) {
     return (
         <div className="bg-surface rounded-xl p-4 shadow-lg border border-border h-full flex flex-col relative overflow-hidden">
             {loading && (
-                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-10 flex items-center justify-center">
+                <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-sm z-10 flex items-center justify-center">
                     <div className="flex flex-col items-center space-y-2">
                         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <span className="text-xs text-blue-400 font-medium tracking-widest uppercase">Calculating Forecast...</span>
@@ -107,7 +107,7 @@ export function PredictivePanel({ data, location }) {
                 </div>
             </div>
 
-            <div className="flex-1 bg-[#020617] rounded-lg p-3 border border-slate-800/50">
+            <div className="flex-1 bg-white rounded-lg p-3 border border-slate-200/50">
                 {chartData.datasets.length > 0 && (
                     <Line
                         options={{
@@ -116,12 +116,12 @@ export function PredictivePanel({ data, location }) {
                             scales: {
                                 y: {
                                     beginAtZero: false,
-                                    grid: { color: 'rgba(255,255,255,0.05)' },
-                                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }
+                                    grid: { color: 'rgba(0,0,0,0.05)' },
+                                    ticks: { color: '#64748b', font: { size: 10 } }
                                 },
                                 x: {
                                     grid: { display: false },
-                                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }
+                                    ticks: { color: '#64748b', font: { size: 10 } }
                                 }
                             },
                             plugins: {
@@ -140,10 +140,10 @@ export function PredictivePanel({ data, location }) {
                 )}
             </div>
 
-            <div className="mt-4 flex justify-between items-center text-xs border-t border-slate-700/50 pt-3">
+            <div className="mt-4 flex justify-between items-center text-xs border-t border-slate-300/50 pt-3">
                 <div className="flex flex-col">
                     <span className="text-slate-500 uppercase text-[9px] font-bold">Location</span>
-                    <span className="text-slate-300 font-medium">{location?.name || 'Kerala'}</span>
+                    <span className="text-slate-700 font-medium">{location?.name || 'Kerala'}</span>
                 </div>
                 <div className="flex flex-col items-end">
                     <span className="text-slate-500 uppercase text-[9px] font-bold">R² Accuracy</span>

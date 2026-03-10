@@ -7,9 +7,9 @@ export default {
     theme: {
         extend: {
             colors: {
-                background: '#0f172a',
-                surface: '#1e293b',
-                border: '#334155'
+                background: '#ffffff',
+                surface: '#f8fafc',
+                border: '#e2e8f0'
             }
         },
     },

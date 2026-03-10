@@ -30,16 +30,16 @@ export function SyncNodes({ refreshKey, nodes = [] }) {
             </div>
 
             <div className="space-y-4 font-mono">
-                <div className="flex justify-between border-b border-slate-700 pb-2">
-                    <span className="text-slate-400">Active Sensors</span>
-                    <span className="text-white font-bold">{nodes.length} / 15</span>
+                <div className="flex justify-between border-b border-slate-300 pb-2">
+                    <span className="text-slate-600">Active Sensors</span>
+                    <span className="text-slate-900 font-bold">{nodes.length} / 15</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-700 pb-2">
-                    <span className="text-slate-400">Sync Latency</span>
+                <div className="flex justify-between border-b border-slate-300 pb-2">
+                    <span className="text-slate-600">Sync Latency</span>
                     <span className="text-emerald-400">{latency} ms</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-slate-400">Trend Vector</span>
+                    <span className="text-slate-600">Trend Vector</span>
                     <span className={`font-bold ${trendColor}`}>{trend}</span>
                 </div>
             </div>

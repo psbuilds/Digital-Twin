@@ -14,10 +14,10 @@ export function PollutantPanel({ data, loading }) {
     if (loading || !data) {
         return (
             <div className="bg-surface rounded-xl p-4 shadow-lg border border-border animate-pulse">
-                <div className="h-6 w-32 bg-slate-700 rounded mb-4"></div>
+                <div className="h-6 w-32 bg-slate-200 rounded mb-4"></div>
                 <div className="space-y-3">
                     {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className="h-10 bg-slate-700 rounded"></div>
+                        <div key={i} className="h-10 bg-slate-200 rounded"></div>
                     ))}
                 </div>
             </div>
@@ -37,10 +37,10 @@ export function PollutantPanel({ data, loading }) {
         return (
             <div key={key} className="flex flex-col mb-4 last:mb-0">
                 <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-slate-300">{label}</span>
-                    <span className="text-slate-200">{val !== null ? val.toFixed(1) : 'N/A'} <span className="text-xs text-slate-500">{unit}</span></span>
+                    <span className="font-medium text-slate-700">{label}</span>
+                    <span className="text-slate-800">{val !== null ? val.toFixed(1) : 'N/A'} <span className="text-xs text-slate-500">{unit}</span></span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2">
+                <div className="w-full bg-slate-100 rounded-full h-2">
                     <div className={`h-2 rounded-full ${colorClass}`} style={{ width: `${width}%` }}></div>
                 </div>
             </div>
