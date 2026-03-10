@@ -7,6 +7,7 @@ import { SyncNodes } from './components/SyncNodes';
 import { PredictivePanel } from './components/PredictivePanel';
 import { Hub3D } from './components/Hub3D';
 import { HeatmapSection } from './components/HeatmapSection';
+import { TwinInsights } from './components/TwinInsights';
 import { keralaLocations } from './data/keralaLocations';
 import { Cloud, Radio } from 'lucide-react';
 
@@ -74,6 +75,7 @@ function App() {
     const renderTab = () => {
         switch (activeTab) {
             case 'predictive': return <PredictivePanel data={currentData} location={selectedLocation} />;
+            case 'digitaltwin': return <TwinInsights location={selectedLocation} />;
             case '3dhub': return <Hub3D data={currentData} />;
             case 'heatmap': return <HeatmapSection />;
             default: return <PredictivePanel data={currentData} location={selectedLocation} />;
@@ -101,7 +103,7 @@ function App() {
                 </div>
 
                 <div className="flex space-x-2">
-                    {['predictive', '3dhub', 'heatmap'].map(tab => (
+                    {['predictive', 'digitaltwin', '3dhub', 'heatmap'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -110,7 +112,7 @@ function App() {
                                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                 }`}
                         >
-                            {tab.charAt(0).toUpperCase() + tab.slice(1).replace('hub', ' Hub')}
+                            {tab === 'digitaltwin' ? 'Twin Insights' : tab.charAt(0).toUpperCase() + tab.slice(1).replace('hub', ' Hub')}
                         </button>
                     ))}
                 </div>

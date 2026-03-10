@@ -1,7 +1,7 @@
 from typing import List
 
 from dt.models.twin_state import TwinState
-from dt.ingestion.state_deriver import update_state
+from dt.engine.state_updater import update_state
 
 
 def run_scenario(
@@ -18,6 +18,6 @@ def run_scenario(
 
     for _ in range(hours):
         history.append(state)
-        state = update_state(state)
+        state, _ = update_state(state)
 
     return history

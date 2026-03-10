@@ -17,6 +17,10 @@ from aqi_logic.current_aqi_rules import calculate_overall_aqi
 from aqi_logic.status_mapping import get_aqi_status
 from aqi_logic.open_meteo_fetcher import OpenMeteoAQIFetcher
 
+# Digital Twin Module Imports
+from dt.models.twin_state import TwinState
+from dt.engine.state_updater import update_state
+
 app = Flask(__name__, static_folder='dist', static_url_path='/')
 
 
@@ -102,6 +106,64 @@ def get_live_prediction():
             return jsonify(forecast)
         return jsonify({'error': 'Model not available'}), 503
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dt-insights')
+def get_dt_insights():
+    try:
+        lat = float(request.args.get('lat', 9.9312))
+        lon = float(request.args.get('lon', 76.2673))
+        
+        # Get baseline from Open-Meteo
+        live_data = open_meteo_fetcher.fetch_location_data(lat, lon)
+        if not live_data:
+            return jsonify({'error': 'Source data unavailable'}), 503
+            
+        p = live_data['pollutants']
+        m = live_data['metrics']
+        
+        # Initialize TwinState
+        state = TwinState(
+            grid_id=f"node_{lat}_{lon}",
+            timestamp=datetime.now(),
+            latitude=lat,
+            longitude=lon,
+            wind_speed=float(m['wind'].split()[0]) if 'N/A' not in m['wind'] else 1.5,
+            wind_direction=270.0, # Defaulting if unknown
+            temperature=float(m['temp'].replace('°C','')) if 'N/A' not in m['temp'] else 29.0,
+            precipitation=float(m.get('precip', 0.0)),
+            pm25=p['pm25'] or 30.0,
+            pm10=p['pm10'] or 50.0,
+            no2=p['no2'] or 20.0,
+            o3=p['o3'] or 30.0,
+            so2=p['so2'] or 5.0,
+            co=p['co'] or 0.5,
+            is_coastal=True
+        )
+        
+        # Run 24h simulation
+        history = []
+        current_state = state
+        for _ in range(24):
+            current_state, report = update_state(current_state)
+            history.append({
+                'time': current_state.timestamp.strftime("%H:%M"),
+                'aqi': report['aqi'],
+                'dominant': report['dominant_pollutant'],
+                'reasons': report.get('rule_reasons', {}),
+                'effects': report.get('rule_effects', {})
+            })
+            
+        return jsonify({
+            'history': history,
+            'initial_state': {
+                'aqi': calculate_overall_aqi(p),
+                'metrics': m
+            }
+        })
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/ml-results')

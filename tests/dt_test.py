@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from dt.models.twin_state import TwinState
-from dt.ingestion.state_deriver import update_state
+from dt.engine.state_updater import update_state
 
 
 # Create an initial TwinState
@@ -30,7 +30,7 @@ state = TwinState(
 
 # Run the Digital Twin for a few hours
 for hour in range(6):
-    state = update_state(state)
+    state, report = update_state(state)
     print(
         f"{state.timestamp} | "
         f"PM2.5={state.pm25:.2f} | "
