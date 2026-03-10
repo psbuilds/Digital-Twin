@@ -31,14 +31,22 @@ def apply_diurnal_temperature(state: TwinState):
 
 def update_state(
     state: TwinState,
-    dt_hours: float = 1.0
+    dt_hours: float = 1.0,
+    weather_input: Dict = None
 ) -> Tuple[TwinState, Dict]:
     if dt_hours <= 0:
         raise ValueError("dt_hours must be positive")
 
     next_state = deepcopy(state)                            # Ensure original state is preserved.
     next_state.timestamp += timedelta(hours=dt_hours)       # Moves clock forward
-    apply_diurnal_temperature(next_state)
+    
+    if weather_input:
+        next_state.temperature = weather_input.get('temp', next_state.temperature)
+        next_state.wind_speed = weather_input.get('wind_speed', next_state.wind_speed)
+        next_state.wind_direction = weather_input.get('wind_direction', next_state.wind_direction)
+        next_state.precipitation = weather_input.get('precip', next_state.precipitation)
+    else:
+        apply_diurnal_temperature(next_state)
 
     # BEFORE snapshot captures pollutant values before AQI rules and clamping.
     # Used for debugging and auditing.

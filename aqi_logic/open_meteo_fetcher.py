@@ -81,6 +81,37 @@ class OpenMeteoAQIFetcher:
             print(f"Exception during Open-Meteo fetch: {e}")
             return None
 
+    def fetch_hourly_forecast(self, lat, lon):
+        """
+        Fetches 24-hour hourly weather forecast (temp, wind, precip) for DT simulation.
+        """
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation",
+            "forecast_days": 1
+        }
+        try:
+            res = requests.get(self.weather_base_url, params=params, timeout=10)
+            if res.status_code == 200:
+                data = res.json().get('hourly', {})
+                # Format into a list of dictionaries for easier consumption
+                forecasts = []
+                for i in range(len(data.get('time', []))):
+                    forecasts.append({
+                        'time': data['time'][i],
+                        'temp': data['temperature_2m'][i],
+                        'humidity': data['relative_humidity_2m'][i],
+                        'wind_speed': data['wind_speed_10m'][i],
+                        'wind_direction': data['wind_direction_10m'][i],
+                        'precip': data['precipitation'][i]
+                    })
+                return forecasts
+            return None
+        except Exception as e:
+            print(f"Hourly forecast fetch failed: {e}")
+            return None
+
     def fetch_all_nodes_data(self):
         """
         Fetches air quality and weather data for all Kerala locations in batch.

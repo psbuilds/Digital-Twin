@@ -116,6 +116,8 @@ def get_dt_insights():
         
         # Get baseline from Open-Meteo
         live_data = open_meteo_fetcher.fetch_location_data(lat, lon)
+        forecast_data = open_meteo_fetcher.fetch_hourly_forecast(lat, lon)
+        
         if not live_data:
             return jsonify({'error': 'Source data unavailable'}), 503
             
@@ -141,17 +143,26 @@ def get_dt_insights():
             is_coastal=True
         )
         
-        # Run 24h simulation
+        # Run 24h simulation using forecast data
         history = []
         current_state = state
-        for _ in range(24):
-            current_state, report = update_state(current_state)
+        
+        # We simulate 24 hours. The forecast usually starts from actual hour.
+        for i in range(24):
+            weather_input = forecast_data[i] if forecast_data and i < len(forecast_data) else None
+            current_state, report = update_state(current_state, weather_input=weather_input)
+            
             history.append({
                 'time': current_state.timestamp.strftime("%H:%M"),
                 'aqi': report['aqi'],
                 'dominant': report['dominant_pollutant'],
                 'reasons': report.get('rule_reasons', {}),
-                'effects': report.get('rule_effects', {})
+                'effects': report.get('rule_effects', {}),
+                'meteo': {
+                    'temp': current_state.temperature,
+                    'wind': current_state.wind_speed,
+                    'precip': current_state.precipitation
+                }
             })
             
         return jsonify({
