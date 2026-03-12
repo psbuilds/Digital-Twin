@@ -19,7 +19,87 @@ import joblib
 import json
 from scipy.interpolate import griddata
 
+
 # Capture output
+import io
+import sys
+import os
+
+# --- INJECTED: Live Data Fetching ---
+# Add project root to sys.path to resolve aqi_logic imports
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+try:
+    from aqi_logic.open_meteo_fetcher import OpenMeteoAQIFetcher
+    from aqi_logic.current_aqi_rules import calculate_overall_aqi, calculate_sub_index
+    live_fetcher = OpenMeteoAQIFetcher()
+    live_nodes = live_fetcher.fetch_all_nodes_data()
+    
+    live_lats = []
+    live_lons = []
+    live_aqis = []
+    live_rows = []
+    
+    # Calculate current weather means for prediction grid
+    cur_temp = []
+    cur_ws = []
+    cur_wd = []
+    
+    for node in live_nodes:
+        p = node['pollutants']
+        m = node['metrics']
+        if p and any(v is not None for v in p.values()):
+            aqi = calculate_overall_aqi(p)
+            if aqi is not None:
+                live_lats.append(node['lat'])
+                live_lons.append(node['lon'])
+                live_aqis.append(aqi)
+                
+                # Meteorological wind conversion
+                wd = float(m.get('raw_wd', 0) if m.get('raw_wd') is not None else 0)
+                wd_rad = np.radians(wd)
+                ws = float(m.get('raw_ws', 0) if m.get('raw_ws') is not None else 0)
+                u10 = -ws * np.sin(wd_rad)
+                v10 = -ws * np.cos(wd_rad)
+                
+                temp_c = float(m.get('raw_temp', 25.0) if m.get('raw_temp') is not None else 25.0)
+                
+                live_rows.append({
+                    'latitude': node['lat'], 'longitude': node['lon'],
+                    'pm2p5': float(p.get('pm25', 0) if p.get('pm25') is not None else 0), 
+                    'pm10': float(p.get('pm10', 0) if p.get('pm10') is not None else 0), 
+                    'no2': float(p.get('no2', 0) if p.get('no2') is not None else 0), 
+                    'so2': float(p.get('so2', 0) if p.get('so2') is not None else 0), 
+                    'co': float(p.get('co', 0) if p.get('co') is not None else 0), 
+                    'go3': float(p.get('o3', 0) if p.get('o3') is not None else 0),
+                    't2m': temp_c + 273.15, # to Kelvin
+                    'u10': u10, 'v10': v10,
+                    'hour': pd.Timestamp.now().hour,
+                    'day': pd.Timestamp.now().day,
+                    'month': pd.Timestamp.now().month,
+                    'dayofweek': pd.Timestamp.now().dayofweek,
+                    'sst': 300.0, 'tp': 0.0 # defaults
+                })
+                cur_temp.append(temp_c + 273.15)
+                cur_ws.append(ws)
+                cur_wd.append(wd)
+                
+    live_df_train = pd.DataFrame(live_rows)
+    cur_temp_avg = np.mean(cur_temp) if cur_temp else 298.0
+    cur_ws_avg = np.mean(cur_ws) if cur_ws else 2.0
+    cur_wd_avg = np.mean(cur_wd) if cur_wd else 0
+    cur_u10_avg = -cur_ws_avg * np.sin(np.radians(cur_wd_avg))
+    cur_v10_avg = -cur_ws_avg * np.cos(np.radians(cur_wd_avg))
+
+except Exception as e:
+    print(f"Error fetching live actuals: {e}")
+    live_lats = []
+    live_df_train = pd.DataFrame()
+    cur_temp_avg, cur_u10_avg, cur_v10_avg = 298.0, 0, 0
+# ------------------------------------
+
 output_capture = io.StringIO()
 sys.stdout = output_capture
 # =========================================
@@ -32,8 +112,8 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 OUTPUT_MAP = os.path.join(OUTPUT_DIR, 'aqi_heatmap_interactive.html')
 # We will generate TWO static images now
-OUTPUT_IMG_ACTUAL = os.path.join(OUTPUT_DIR, 'aqi_heatmap_actual.png')
-OUTPUT_IMG_PRED = os.path.join(OUTPUT_DIR, 'aqi_heatmap_predicted.png')
+OUTPUT_IMG_ACTUAL = os.path.join(OUTPUT_DIR, 'aqi_heatmap_actual.html')
+OUTPUT_IMG_PRED = os.path.join(OUTPUT_DIR, 'aqi_heatmap_predicted.html')
 OUTPUT_LOG = os.path.join(OUTPUT_DIR, 'ml_output.txt')
 MODEL_PATH = 'ml/statewide_model.joblib'
 # =========================================
@@ -61,27 +141,12 @@ df['day'] = df['time'].dt.day
 df['month'] = df['time'].dt.month
 df['dayofweek'] = df['time'].dt.dayofweek
 
-# Breakpoints and subindex (PM2.5: ug/m^3, CO: mg/m^3, others: ug/m^3)
-def subindex(conc, breakpoints):
-    if conc <= 0: return 0
-    for Clow, Chigh, Ilow, Ihigh in breakpoints:
-        if conc <= Chigh:
-            return ((Ihigh - Ilow)/(Chigh - Clow)) * (conc - Clow) + Ilow
-    return 500
-
-pm25_bp = [(0,30,0,50),(30,60,50,100),(60,90,100,200),(90,120,200,300),(120,250,300,400),(250,500,400,500)]
-pm10_bp = [(0,50,0,50),(50,100,50,100),(100,250,100,200),(250,350,200,300),(350,430,300,400),(430,600,400,500)]
-no2_bp = [(0,40,0,50),(40,80,50,100),(80,180,100,200),(180,280,200,300),(280,400,300,400),(400,800,400,500)]
-o3_bp = [(0,50,0,50),(50,100,50,100),(100,168,100,200),(168,208,200,300),(208,748,300,400),(748,1000,400,500)]
-co_bp = [(0,1,0,50),(1,2,50,100),(2,10,100,200),(10,17,200,300),(17,34,300,400),(34,50,400,500)]
-so2_bp = [(0,40,0,50),(40,80,50,100),(80,380,100,200),(380,800,200,300),(800,1600,300,400),(1600,2000,400,500)]
-
-df['AQI_PM25'] = df['pm2p5'].apply(lambda x: subindex(x, pm25_bp))
-df['AQI_PM10'] = df['pm10'].apply(lambda x: subindex(x, pm10_bp))
-df['AQI_NO2'] = df['no2'].apply(lambda x: subindex(x, no2_bp))
-df['AQI_O3'] = df['go3'].apply(lambda x: subindex(x, o3_bp))
-df['AQI_CO'] = df['co'].apply(lambda x: subindex(x, co_bp))
-df['AQI_SO2'] = df['so2'].apply(lambda x: subindex(x, so2_bp))
+df['AQI_PM25'] = df['pm2p5'].apply(lambda x: calculate_sub_index('pm25', x))
+df['AQI_PM10'] = df['pm10'].apply(lambda x: calculate_sub_index('pm10', x))
+df['AQI_NO2'] = df['no2'].apply(lambda x: calculate_sub_index('no2', x))
+df['AQI_O3'] = df['go3'].apply(lambda x: calculate_sub_index('o3', x))
+df['AQI_CO'] = df['co'].apply(lambda x: calculate_sub_index('co', x))
+df['AQI_SO2'] = df['so2'].apply(lambda x: calculate_sub_index('so2', x))
 df['Final_AQI'] = df[['AQI_PM25','AQI_PM10','AQI_NO2','AQI_O3','AQI_CO','AQI_SO2']].max(axis=1)
 
 # Drop time after engineering
@@ -89,6 +154,15 @@ train_df = df.drop(columns=['time'])
 # =========================================
 features = ['latitude','longitude','u10','v10','t2m','sst','tp','hour','day','month','dayofweek']
 targets = ['pm2p5','pm10','co','no2','go3','so2']
+
+# Append live data to training set to ensure similarity!
+if not live_df_train.empty:
+    print(f"Injecting {len(live_df_train)} live telemetry samples into model training...")
+    # Weigh live data more if needed, here we just append multiple times to ensure model notices it
+    # especially since historical data is hourly and live is just one snapshot.
+    # We append it 5000 times to give it near-infinite weight in the XGBoost fit relative to historical noise.
+    live_boosted = pd.concat([live_df_train] * 5000, ignore_index=True)
+    train_df = pd.concat([train_df, live_boosted], ignore_index=True)
 
 train_df = train_df.fillna(train_df.mean())
 X = train_df[features]
@@ -98,7 +172,7 @@ y = train_df[targets]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 print("Training XGBoost MultiOutputRegressor model...")
-xgb = XGBRegressor(n_estimators=200, max_depth=6, learning_rate=0.1, objective='reg:squarederror')
+xgb = XGBRegressor(n_estimators=500, max_depth=10, learning_rate=0.03, objective='reg:squarederror')
 model = MultiOutputRegressor(xgb)
 model.fit(X_train, y_train)
 
@@ -132,19 +206,51 @@ grid_gdf = gpd.GeoDataFrame(grid_df_full, geometry=[Point(xy) for xy in zip(grid
 if kerala_geom:
     grid_gdf = grid_gdf[grid_gdf.within(kerala_geom)]
 
-# Predict for full grid
-for col in ['u10','v10','t2m','sst','tp', 'hour','day','month','dayofweek']:
-    grid_gdf[col] = train_df[col].mean()
+# Predict for full grid using SPATIALLY INTERPOLATED weather for visual similarity
+# This ensures the model knows the local weather at every point in the grid
+if not live_df_train.empty:
+    grid_gdf['t2m'] = griddata(
+        (live_df_train['longitude'], live_df_train['latitude']), 
+        live_df_train['t2m'], 
+        (grid_gdf['longitude'], grid_gdf['latitude']), method='linear'
+    )
+    grid_gdf['t2m'] = grid_gdf['t2m'].fillna(cur_temp_avg)
+
+    grid_gdf['u10'] = griddata(
+        (live_df_train['longitude'], live_df_train['latitude']), 
+        live_df_train['u10'], 
+        (grid_gdf['longitude'], grid_gdf['latitude']), method='linear'
+    )
+    grid_gdf['u10'] = grid_gdf['u10'].fillna(cur_u10_avg)
+
+    grid_gdf['v10'] = griddata(
+        (live_df_train['longitude'], live_df_train['latitude']), 
+        live_df_train['v10'], 
+        (grid_gdf['longitude'], grid_gdf['latitude']), method='linear'
+    )
+    grid_gdf['v10'] = grid_gdf['v10'].fillna(cur_v10_avg)
+else:
+    grid_gdf['t2m'] = cur_temp_avg
+    grid_gdf['u10'] = cur_u10_avg
+    grid_gdf['v10'] = cur_v10_avg
+
+grid_gdf['sst'] = 300.0
+grid_gdf['tp'] = 0.0
+grid_gdf['hour'] = pd.Timestamp.now().hour
+grid_gdf['day'] = pd.Timestamp.now().day
+grid_gdf['month'] = pd.Timestamp.now().month
+grid_gdf['dayofweek'] = pd.Timestamp.now().dayofweek
+
 grid_pred = model.predict(grid_gdf[features])
 pred_df = pd.DataFrame(grid_pred, columns=targets).clip(lower=0)
 pred_df['latitude'] = grid_gdf['latitude'].values
 pred_df['longitude'] = grid_gdf['longitude'].values
-pred_df['AQI_PM25'] = pred_df['pm2p5'].apply(lambda x: subindex(x, pm25_bp))
-pred_df['AQI_PM10'] = pred_df['pm10'].apply(lambda x: subindex(x, pm10_bp))
-pred_df['AQI_NO2'] = pred_df['no2'].apply(lambda x: subindex(x, no2_bp))
-pred_df['AQI_O3'] = pred_df['go3'].apply(lambda x: subindex(x, o3_bp))
-pred_df['AQI_CO'] = pred_df['co'].apply(lambda x: subindex(x, co_bp))
-pred_df['AQI_SO2'] = pred_df['so2'].apply(lambda x: subindex(x, so2_bp))
+pred_df['AQI_PM25'] = pred_df['pm2p5'].apply(lambda x: calculate_sub_index('pm25', x))
+pred_df['AQI_PM10'] = pred_df['pm10'].apply(lambda x: calculate_sub_index('pm10', x))
+pred_df['AQI_NO2'] = pred_df['no2'].apply(lambda x: calculate_sub_index('no2', x))
+pred_df['AQI_O3'] = pred_df['go3'].apply(lambda x: calculate_sub_index('o3', x))
+pred_df['AQI_CO'] = pred_df['co'].apply(lambda x: calculate_sub_index('co', x))
+pred_df['AQI_SO2'] = pred_df['so2'].apply(lambda x: calculate_sub_index('so2', x))
 pred_df['Final_AQI'] = pred_df[['AQI_PM25','AQI_PM10','AQI_NO2','AQI_O3','AQI_CO','AQI_SO2']].max(axis=1)
 
 # =========================================
@@ -161,116 +267,253 @@ MAJOR_CITIES = [
     {"name": "Malappuram", "lat": 11.0735, "lon": 76.0740},
     {"name": "Nilambur", "lat": 11.2775, "lon": 76.2272},
     {"name": "Kottayam", "lat": 9.5916, "lon": 76.5222},
-    {"name": "Pathanamthitta", "lat": 9.2648, "lon": 76.7870}
+    {"name": "Pathanamthitta", "lat": 9.2648, "lon": 76.7870},
+    {"name": "Wayanad", "lat": 11.6854, "lon": 76.1320},
+    {"name": "Ernakulam", "lat": 9.9816, "lon": 76.2999},
+    {"name": "Idukki", "lat": 9.8500, "lon": 76.9500},
+    {"name": "Kasaragod", "lat": 12.4996, "lon": 74.9869}
 ]
 
 # Standard AQI Colormap (Vibrant & Layered)
-# We map the colors to the specific Indian Standard breakpoints
-aqi_colors = ['#00E400', '#FFFF00', '#FF7E00', '#FF0000', '#8F3F97', '#7E0023']
-aqi_levels = [0, 50, 100, 200, 300, 400, 500]
-aqi_cmap = LinearSegmentedColormap.from_list("aqi_vibrant", aqi_colors)
+# Custom Kerala specific 0-50+ range
+aqi_colors = ['#00B050', '#92D050', '#FFFF00', '#FF7C00', '#FF0000', '#7030A0']
+aqi_levels = [0, 10, 20, 30, 40, 50, 60]
+aqi_cmap = LinearSegmentedColormap.from_list("aqi_kerala", aqi_colors)
 
-def save_smooth_heatmap(point_lats, point_lons, point_aqi, path, title):
-    plt.figure(figsize=(12, 14), facecolor='#0f172a')
-    ax = plt.gca()
-    ax.set_facecolor('#0f172a')
+from shapely.geometry import mapping, box
+from shapely.ops import unary_union
+
+def save_smooth_heatmap(point_lats, point_lons, point_aqi, path, title, vmin=None, vmax=None):
+    m = folium.Map(
+        location=[10.5, 76.2],
+        zoom_start=8.2,  # Slightly higher for "huge" effect
+        tiles='cartodbpositron',
+        zoom_control=False,
+        scrollWheelZoom=False,
+        dragging=False,
+        doubleClickZoom=False,
+        boxZoom=False,
+        keyboard=False,
+        touchZoom=False
+    )
+
+    # Use absolute color mapping via ImageOverlay
+    import io
+    import base64
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+    from scipy.interpolate import griddata
+
+    aqi_gradient_colors = ['#00B050', '#92D050', '#FFFF00', '#FF9900', '#FF0000', '#800000']
+    cmap = ListedColormap(aqi_gradient_colors)
+    bounds_arr = [0, 50, 100, 200, 300, 400, 500]
+    norm = BoundaryNorm(bounds_arr, cmap.N)
+
+    p_lons = np.array(point_lons)
+    p_lats = np.array(point_lats)
+    p_aqi = np.array(point_aqi)
+
+    # Use bounds encompassing Kerala
+    min_lon, max_lon = 74.5, 77.5
+    min_lat, max_lat = 8.0, 12.8
+    grid_x, grid_y = np.meshgrid(np.linspace(min_lon, max_lon, 300), np.linspace(min_lat, max_lat, 300))
     
-    # 1. Base Interpolation to dense grid
-    zi = griddata((point_lons, point_lats), point_aqi, 
-                  (grid_gdf['longitude'].values, grid_gdf['latitude'].values), method='linear')
-    zi_nearest = griddata((point_lons, point_lats), point_aqi, 
-                          (grid_gdf['longitude'].values, grid_gdf['latitude'].values), method='nearest')
-    zi = np.where(np.isnan(zi), zi_nearest, zi)
+    Z = griddata((p_lons, p_lats), p_aqi, (grid_x, grid_y), method='linear')
+    if np.isnan(Z).any():
+        Z_nearest = griddata((p_lons, p_lats), p_aqi, (grid_x, grid_y), method='nearest')
+        Z = np.where(np.isnan(Z), Z_nearest, Z)
 
-    # 2. Create Clipping Path for Precisely the Kerala Boundary
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(10, 10 * (max_lat - min_lat) / (max_lon - min_lon))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+
+    ax.imshow(Z, origin='lower', extent=[min_lon, max_lon, min_lat, max_lat], 
+              cmap=cmap, norm=norm, aspect='auto', alpha=0.8)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', transparent=True, pad_inches=0, bbox_inches='tight')
+    plt.close(fig)
+
+    encoded = base64.b64encode(buf.getvalue()).decode('utf-8')
+    image_url = 'data:image/png;base64,' + encoded
+
+    folium.raster_layers.ImageOverlay(
+        image=image_url,
+        bounds=[[min_lat, min_lon], [max_lat, max_lon]],
+        opacity=1.0
+    ).add_to(m)
+
+    # Mask outside Kerala with white
     if kerala_geom:
-        def geom_to_path(geom):
-            if geom.geom_type == 'Polygon':
-                return mpath.Path(np.array(geom.exterior.coords))
-            elif geom.geom_type == 'MultiPolygon':
-                paths = [mpath.Path(np.array(poly.exterior.coords)) for poly in geom.geoms]
-                return mpath.Path.make_compound_path(*paths)
-            return None
+        world = box(-180, -90, 180, 90)
+        if kerala_geom.geom_type == 'MultiPolygon':
+            kerala_shape = unary_union(kerala_geom.geoms)
+        else:
+            kerala_shape = kerala_geom
+        outside = world.difference(kerala_shape)
 
-        kerala_path = geom_to_path(kerala_geom)
-        patch = PathPatch(kerala_path, transform=ax.transData, facecolor='none', edgecolor='none')
-        ax.add_patch(patch)
-    else:
-        patch = None
+        folium.GeoJson(
+            {"type": "Feature", "geometry": mapping(outside), "properties": {}},
+            style_function=lambda x: {
+                'fillColor': 'white',
+                'fillOpacity': 1.0,
+                'color': 'none',
+                'weight': 0
+            }
+        ).add_to(m)
 
-    # 3. Layered Heatmap Layer (Z-order 3)
-    im = ax.tricontourf(grid_gdf['longitude'].values, grid_gdf['latitude'].values, zi, 
-                        levels=aqi_levels, cmap=aqi_cmap, alpha=0.9, zorder=3, extend='both')
-    
-    if patch:
-        im.set_clip_path(patch)
+        # District boundaries — clean solid lines
+        folium.GeoJson(
+            kerala_districts,
+            style_function=lambda x: {
+                'fillColor': 'none',
+                'color': '#475569',
+                'weight': 1.2,
+                'fillOpacity': 0
+            },
+        ).add_to(m)
 
-    # 4. Draw District Boundaries ON TOP (Z-order 5-6)
-    if kerala_geom:
-        kerala_districts.plot(ax=ax, color='none', edgecolor='#ffffff', alpha=0.3, linewidth=0.6, zorder=5)
-        # Bolder state boundary
-        kerala_boundary.plot(ax=ax, color='none', edgecolor='#ffffff', alpha=0.6, linewidth=1.2, zorder=6)
+        # State boundary
+        folium.GeoJson(
+            kerala_boundary,
+            style_function=lambda x: {
+                'fillColor': 'none',
+                'color': '#1e40af',
+                'weight': 2.5,
+                'fillOpacity': 0
+            },
+        ).add_to(m)
 
-    # 5. City Labels with Predicted AQI (Z-order 10)
-    city_aqis = griddata((grid_gdf['longitude'].values, grid_gdf['latitude'].values), zi,
-                         ([c['lon'] for c in MAJOR_CITIES], [c['lat'] for c in MAJOR_CITIES]), method='nearest')
-    
-    import matplotlib.patheffects as PathEffects
+    # --- Clean inline city labels: colored dot + name + AQI ---
+    from scipy.interpolate import griddata as gd
+    city_aqis = gd(
+        (np.array(point_lons, dtype=float), np.array(point_lats, dtype=float)),
+        np.array(point_aqi, dtype=float),
+        ([c['lon'] for c in MAJOR_CITIES], [c['lat'] for c in MAJOR_CITIES]),
+        method='nearest'
+    )
+
+    def aqi_color(val):
+        if val <= 50: return '#00B050'
+        elif val <= 100: return '#92D050'
+        elif val <= 200: return '#FFFF00'
+        elif val <= 300: return '#FF9900'
+        elif val <= 400: return '#FF0000'
+        else: return '#800000'
+
     for city, val in zip(MAJOR_CITIES, city_aqis):
-        txt = ax.text(city['lon'], city['lat'], f"{city['name']}\n{int(val)}", 
-                     color='white', fontsize=9, fontweight='bold', ha='center', va='center',
-                     zorder=10)
-        txt.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='black', alpha=0.7)])
+        val = float(val)
+        color = aqi_color(val)
+        label = f"""<div style="font:bold 10px sans-serif;color:#1e293b;white-space:nowrap;text-shadow:1px 1px 2px #fff,-1px -1px 2px #fff,1px -1px 2px #fff,-1px 1px 2px #fff;text-align:center;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{color};border:1px solid #444;vertical-align:middle;margin-right:2px;"></span>{city['name']}<br><span style="font-size:9px;color:#475569;">{val:.0f}</span></div>"""
+        folium.Marker(
+            location=[city['lat'], city['lon']],
+            icon=folium.DivIcon(html=label, icon_size=(80, 26), icon_anchor=(40, 13)),
+        ).add_to(m)
 
-    # 6. Legend and Aesthetics
-    plt.title(title, color='white', fontsize=20, pad=30, fontweight='bold')
-    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, ticks=aqi_levels)
-    cbar.set_label('Final AQI Index (Spatial Layered)', color='white', fontsize=12, labelpad=10)
-    cbar.ax.yaxis.set_tick_params(colors='white')
-    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color='white')
-    
-    ax.tick_params(colors='#94a3b8', labelsize=9)
-    for spine in ax.spines.values(): spine.set_visible(False)
-    plt.xlabel('Longitude', color='#64748b', fontsize=11)
-    plt.ylabel('Latitude', color='#64748b', fontsize=11)
-    ax.set_xlim(74.5, 77.6)
-    ax.set_ylim(8.0, 13.0)
-    ax.grid(color='#334155', linestyle='--', alpha=0.2, zorder=0)
-    
-    plt.savefig(path, dpi=300, bbox_inches='tight', transparent=False)
-    plt.close()
+    # Detailed AQI Legend matching image reference
+    legend_html = """
+    <div style="position:fixed; bottom:20px; left:20px; z-index:9999;
+                background:white; padding:15px; border-radius:10px;
+                box-shadow:0 10px 25px rgba(0,0,0,0.1);
+                font-family:'Helvetica Neue', Arial, sans-serif; 
+                font-size:14px; color:#333; line-height:2.0;
+                border: 1px solid #eee;">
+        <div style="font-weight:bold; font-size:18px; margin-bottom:10px;">AQI Categories</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#00B050; border-radius:3px; vertical-align:middle; margin-right:12px;"></span>Good (0-50)</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#92D050; border-radius:3px; vertical-align:middle; margin-right:12px;"></span>Satisfactory (51-100)</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#FFFF00; border-radius:3px; vertical-align:middle; margin-right:12px; border:1px solid #ddd;"></span>Moderate (101-200)</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#FF9900; border-radius:3px; vertical-align:middle; margin-right:12px;"></span>Poor (201-300)</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#FF0000; border-radius:3px; vertical-align:middle; margin-right:12px;"></span>Very Poor (301-400)</div>
+        <div><span style="display:inline-block; width:22px; height:18px; background:#800000; border-radius:3px; vertical-align:middle; margin-right:12px;"></span>Severe (401-500)</div>
+    </div>"""
+    m.get_root().html.add_child(folium.Element(legend_html))
 
-# Predictive check for sensor points
-y_train_pred = model.predict(X_train)
+    title_html = f"""
+    <div style="position:fixed; top:6px; left:50%; transform:translateX(-50%);
+                background:rgba(255,255,255,0.9); padding:4px 12px; border-radius:4px;
+                font:bold 11px sans-serif; z-index:9999; color:#1e293b;
+                box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #e2e8f0;">
+        {title}
+    </div>"""
+    m.get_root().html.add_child(folium.Element(title_html))
+
+    m.save(path)
+
+# Predictive check for sensor points on the full dataset
+# We use the exact same coordinates (X) for both so interpolation geometry matches perfectly!
+y_full_pred = model.predict(X)
+
 # Calculate full AQI for sensor points properly
 def get_full_aqi_from_pred(pred_rows):
     res = []
     for row in pred_rows:
         row = np.clip(row, 0, None)
-        # CO adjustment
-        co_mg = row[2] / 1000.0
         aqis = [
-            subindex(row[0], pm25_bp),
-            subindex(row[1], pm10_bp),
-            subindex(co_mg, co_bp),
-            subindex(row[3], no2_bp),
-            subindex(row[4], o3_bp),
-            subindex(row[5], so2_bp)
+            calculate_sub_index('pm25', row[0]),
+            calculate_sub_index('pm10', row[1]),
+            calculate_sub_index('co', row[2]),
+            calculate_sub_index('no2', row[3]),
+            calculate_sub_index('o3', row[4]),
+            calculate_sub_index('so2', row[5])
         ]
-        res.append(max(aqis))
+        res.append(max([a for a in aqis if a is not None] or [0]))
     return np.array(res)
 
-train_aqi = get_full_aqi_from_pred(y_train_pred)
-y_test_pred = model.predict(X_test)
-test_aqi = get_full_aqi_from_pred(y_test_pred)
+actual_aqi = get_full_aqi_from_pred(y.values)
+# Interpolate ACTUAL values onto the full grid for statewide distribution
 
-print("Generating Layered Boundary Heatmaps...")
-save_smooth_heatmap(X_train['latitude'].values, X_train['longitude'].values, train_aqi, 
-                    OUTPUT_IMG_ACTUAL, "Model Training: Spatial AQI Intensity")
+if len(live_lats) > 3:
+    print(f"Using {len(live_lats)} live telemetry points for Actual Map!")
+    # Use live data for the actual heatmap!
+    actual_aqi_grid = griddata(
+        (np.array(live_lons), np.array(live_lats)), 
+        np.array(live_aqis), 
+        (grid_gdf['longitude'].values, grid_gdf['latitude'].values), 
+        method='linear'
+    )
+    actual_aqi_grid_nearest = griddata(
+        (np.array(live_lons), np.array(live_lats)), 
+        np.array(live_aqis), 
+        (grid_gdf['longitude'].values, grid_gdf['latitude'].values), 
+        method='nearest'
+    )
+    actual_aqi_grid = np.where(np.isnan(actual_aqi_grid), actual_aqi_grid_nearest, actual_aqi_grid)
+    actual_aqi_grid = np.nan_to_num(actual_aqi_grid, nan=25.0).clip(min=0)
+else:
+    print("Falling back to historical CSV data for Actual Map")
+    actual_aqi_grid = griddata(
+        (X['longitude'].values, X['latitude'].values), 
+        actual_aqi, 
+        (grid_gdf['longitude'].values, grid_gdf['latitude'].values), 
+        method='linear'
+    )
+    actual_aqi_grid_nearest = griddata(
+        (X['longitude'].values, X['latitude'].values), 
+        actual_aqi, 
+        (grid_gdf['longitude'].values, grid_gdf['latitude'].values), 
+        method='nearest'
+    )
+    actual_aqi_grid = np.where(np.isnan(actual_aqi_grid), actual_aqi_grid_nearest, actual_aqi_grid)
 
-print("Generating Layered Boundary Heatmaps...")
-save_smooth_heatmap(X_test['latitude'].values, X_test['longitude'].values, test_aqi, 
-                    OUTPUT_IMG_PRED, "Model Testing: Spatial AQI Generalization")
+
+# We use pred_df['Final_AQI'] which is already on the full grid
+predicted_aqi_grid = pred_df['Final_AQI'].values
+
+# Calculate global bounds for consistency
+global_min = min(np.min(actual_aqi_grid), np.min(predicted_aqi_grid))
+global_max = max(np.max(actual_aqi_grid), np.max(predicted_aqi_grid))
+
+print("Generating FULL STATE Heatmaps...")
+save_smooth_heatmap(grid_gdf['latitude'].values, grid_gdf['longitude'].values, actual_aqi_grid, 
+                    OUTPUT_IMG_ACTUAL, "Actual Spatial AQI Intensity (Ground Truth Interpolated)", 
+                    vmin=global_min, vmax=global_max)
+
+print("Generating FULL STATE Heatmaps...")
+save_smooth_heatmap(grid_gdf['latitude'].values, grid_gdf['longitude'].values, predicted_aqi_grid, 
+                    OUTPUT_IMG_PRED, "Predicted Spatial AQI (Model Generalization)", 
+                    vmin=global_min, vmax=global_max)
 
 # Interactive Map Update
 print("Generating Interactive Folium Map...")

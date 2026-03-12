@@ -50,11 +50,11 @@ export const HeatmapSection = () => {
                             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                             Target: Actual Sensor Values
                         </h3>
-                        <div className="aspect-[3/4] bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center p-2 shadow-2xl overflow-hidden">
-                            <img
-                                src={`/static/images/aqi_heatmap_actual.png?t=${timestamp}`}
-                                alt="Actual AQI"
-                                className="h-full w-full object-contain"
+                        <div className="aspect-[3/5] bg-slate-100 rounded-lg border border-slate-200 shadow-2xl overflow-hidden relative">
+                            <iframe
+                                src={`/static/images/aqi_heatmap_actual.html?t=${timestamp}`}
+                                title="Actual AQI"
+                                className="absolute inset-0 w-full h-full border-0 pointer-events-none"
                             />
                         </div>
                     </div>
@@ -65,11 +65,11 @@ export const HeatmapSection = () => {
                             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                             XGBoost: Spatial Prediction
                         </h3>
-                        <div className="aspect-[3/4] bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center p-2 shadow-2xl overflow-hidden">
-                            <img
-                                src={`/static/images/aqi_heatmap_predicted.png?t=${timestamp}`}
-                                alt="Predicted AQI"
-                                className="h-full w-full object-contain"
+                        <div className="aspect-[3/5] bg-slate-100 rounded-lg border border-slate-200 shadow-2xl overflow-hidden relative">
+                            <iframe
+                                src={`/static/images/aqi_heatmap_predicted.html?t=${timestamp}`}
+                                title="Predicted AQI"
+                                className="absolute inset-0 w-full h-full border-0 pointer-events-none"
                             />
                         </div>
                     </div>

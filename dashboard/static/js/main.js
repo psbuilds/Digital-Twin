@@ -423,14 +423,14 @@ async function renderHeatmap(districtData) {
             const name = entity.properties.DISTRICT.getValue();
             const val = districtData[name] || 25; // Default if not found
 
-            // Color scale matching the image exactly
+            // Color scale matching the standard Indian AQI categories
             let color;
-            if (val < 30) color = Cesium.Color.fromCssColorString('#22c55e'); // Green
-            else if (val < 60) color = Cesium.Color.fromCssColorString('#84cc16'); // Light Green
-            else if (val < 90) color = Cesium.Color.fromCssColorString('#f59e0b'); // Yellow
-            else if (val < 120) color = Cesium.Color.fromCssColorString('#f97316'); // Orange
-            else if (val < 250) color = Cesium.Color.fromCssColorString('#ef4444'); // Red
-            else color = Cesium.Color.fromCssColorString('#4a0404'); // Dark Red
+            if (val <= 50) color = Cesium.Color.fromCssColorString('#00B050'); // Good
+            else if (val <= 100) color = Cesium.Color.fromCssColorString('#92D050'); // Satisfactory
+            else if (val <= 200) color = Cesium.Color.fromCssColorString('#FFFF00'); // Moderate
+            else if (val <= 300) color = Cesium.Color.fromCssColorString('#FF9900'); // Poor
+            else if (val <= 400) color = Cesium.Color.fromCssColorString('#FF0000'); // Very Poor
+            else color = Cesium.Color.fromCssColorString('#C00000'); // Severe
 
             entity.polygon.material = color.withAlpha(0.85);
             entity.polygon.outline = true;

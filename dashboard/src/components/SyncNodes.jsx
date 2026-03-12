@@ -32,7 +32,7 @@ export function SyncNodes({ refreshKey, nodes = [] }) {
             <div className="space-y-4 font-mono">
                 <div className="flex justify-between border-b border-slate-300 pb-2">
                     <span className="text-slate-600">Active Sensors</span>
-                    <span className="text-slate-900 font-bold">{nodes.length} / 15</span>
+                    <span className="text-slate-900 font-bold">{nodes.length} / 17</span>
                 </div>
                 <div className="flex justify-between border-b border-slate-300 pb-2">
                     <span className="text-slate-600">Sync Latency</span>

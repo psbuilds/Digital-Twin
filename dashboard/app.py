@@ -2,6 +2,7 @@ from flask import Flask, render_template, jsonify, send_from_directory, request
 import os
 import requests
 import sys
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +14,8 @@ sys.path.append(str(PROJECT_ROOT / "ml"))
 
 import predict_future_aqi
 import live_predictor
+import geopandas as gpd
+from shapely.geometry import Point
 from aqi_logic.current_aqi_rules import calculate_overall_aqi
 from aqi_logic.status_mapping import get_aqi_status
 from aqi_logic.open_meteo_fetcher import OpenMeteoAQIFetcher
@@ -85,11 +88,25 @@ def get_predictions():
 @app.route('/api/heatmap')
 def get_heatmap():
     pollutant = request.args.get('pollutant', 'pm2p5')
+    # Map 'pm2p5' to 'pm25' as expected by our AQI rules if needed
+    rule_pollutant = 'pm25' if pollutant == 'pm2p5' else pollutant
+    
     horizon = int(request.args.get('horizon', 24))
     try:
-        heatmap_data = predict_future_aqi.generate_district_forecasts(pollutant, horizon)
-        return jsonify(heatmap_data)
+        raw_forecasts = predict_future_aqi.generate_district_forecasts(pollutant, horizon)
+        
+        # Convert raw concentrations to AQI values
+        aqi_forecasts = {}
+        from aqi_logic.current_aqi_rules import calculate_sub_index
+        
+        for district, conc in raw_forecasts.items():
+            aqi = calculate_sub_index(rule_pollutant, conc)
+            aqi_forecasts[district] = float(aqi) if aqi is not None else 0.0
+            
+        return jsonify(aqi_forecasts)
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/live-prediction')
@@ -190,6 +207,56 @@ def get_dt_insights():
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/heatmap-grid')
+def get_heatmap_grid():
+    try:
+        # Load Kerala boundary once
+        boundary_path = os.path.join(PROJECT_ROOT, 'dashboard/static/data/kerala_districts.json')
+        kerala = gpd.read_file(boundary_path)
+        kerala_geom = kerala.dissolve().geometry.iloc[0]
+
+        # 1. Fetch live station data
+        raw_nodes = open_meteo_fetcher.fetch_all_nodes_data()
+        stations = []
+        for node in raw_nodes:
+            aqi = calculate_overall_aqi(node['pollutants'])
+            stations.append({'lat': node['lat'], 'lon': node['lon'], 'aqi': aqi})
+        
+        if not stations:
+            return jsonify({'points': []})
+
+        # 2. Define a grid (ultra-dense 0.02 resolution for sharp boundaries)
+        lat_min, lat_max = 8.17, 12.8
+        lon_min, lon_max = 74.8, 77.4
+        step = 0.02
+        
+        grid_points = []
+        for lat in np.arange(lat_min, lat_max + step, step):
+            for lon in np.arange(lon_min, lon_max + step, step):
+                # Filter points outside Kerala
+                p = Point(lon, lat)
+                if not kerala_geom.contains(p):
+                    continue
+
+                # Basic IDW Interpolation
+                weighted_sum = 0
+                total_weight = 0
+                for s in stations:
+                    dist_sq = (lat - s['lat'])**2 + (lon - s['lon'])**2
+                    if dist_sq < 0.0001: dist_sq = 0.0001
+                    weight = 1.0 / dist_sq
+                    weighted_sum += s['aqi'] * weight
+                    total_weight += weight
+                
+                interpolated_aqi = weighted_sum / total_weight
+                grid_points.append([float(lat), float(lon), float(interpolated_aqi)])
+        
+        return jsonify({'points': grid_points})
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/ml-results')
 def get_ml_results():
     try:
@@ -205,6 +272,10 @@ def get_ml_results():
 @app.route('/static/images/<path:filename>')
 def serve_static_images(filename):
     return send_from_directory(os.path.join(PROJECT_ROOT, 'dashboard/static/images'), filename)
+
+@app.route('/static/data/<path:filename>')
+def serve_static_data(filename):
+    return send_from_directory(os.path.join(PROJECT_ROOT, 'dashboard/static/data'), filename)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5002)

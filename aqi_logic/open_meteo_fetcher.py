@@ -134,7 +134,7 @@ class OpenMeteoAQIFetcher:
         weather_params = {
             "latitude": lats,
             "longitude": lons,
-            "current": "temperature_2m,relative_humidity_2m,wind_speed_10m"
+            "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m"
         }
         
         try:
@@ -182,6 +182,10 @@ class OpenMeteoAQIFetcher:
                         'humidity': f"{w_data.get('relative_humidity_2m', 'N/A')}%",
                         'wind': f"{w_data.get('wind_speed_10m', 'N/A')} km/h",
                         'temp': f"{w_data.get('temperature_2m', 'N/A')}°C",
+                        'raw_temp': w_data.get('temperature_2m'),
+                        'raw_ws': w_data.get('wind_speed_10m'),
+                        'raw_wd': w_data.get('wind_direction_10m'),
+                        'raw_humidity': w_data.get('relative_humidity_2m'),
                         'uv_index': aq_data.get('uv_index'),
                         'dust': aq_data.get('dust')
                     },
@@ -213,5 +217,10 @@ class OpenMeteoAQIFetcher:
             {'name': 'Kannur', 'lat': 11.8745, 'lon': 75.3704},
             {'name': 'Malappuram', 'lat': 11.0735, 'lon': 76.0740},
             {'name': 'Eloor', 'lat': 10.0754, 'lon': 76.2995},
-            {'name': 'Kakkanad', 'lat': 10.0159, 'lon': 76.3419}
+            {'name': 'Kakkanad', 'lat': 10.0159, 'lon': 76.3419},
+            {'name': 'Wayanad', 'lat': 11.6854, 'lon': 76.1320},
+            {'name': 'Ernakulam', 'lat': 9.9816, 'lon': 76.2999},
+            {'name': 'Pathanamthitta', 'lat': 9.2648, 'lon': 76.7870},
+            {'name': 'Idukki', 'lat': 9.8500, 'lon': 76.9500},
+            {'name': 'Kasaragod', 'lat': 12.4996, 'lon': 74.9869}
         ]
