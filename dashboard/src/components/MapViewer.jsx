@@ -72,15 +72,15 @@ function HeatLayer({ points }) {
                 max: dynamicMax,
                 minOpacity: 0.35,
                 gradient: {
-                    // Gradient stops placed at AQI_threshold / 500
-                    // This ensures each AQI range maps to its correct color
-                    0.00: '#00B050',  // Dark Green  — Good start (AQI 0)
-                    0.10: '#00B050',  // Dark Green  — Good end (AQI 50)
-                    0.20: '#92D050',  // Light Green — Satisfactory end (AQI 100)
-                    0.40: '#FFFF00',  // Yellow      — Moderate end (AQI 200)
-                    0.60: '#FF9900',  // Orange      — Poor end (AQI 300)
-                    0.80: '#FF0000',  // Red         — Very Poor end (AQI 400)
-                    1.00: '#800000'   // Maroon      — Severe (AQI 500)
+                    // Grey-scale gradient for background heatmap
+                    // Light grey for low AQI, dark grey for high AQI
+                    0.00: '#d4d4d4',  // Light Grey   — Good start (AQI 0)
+                    0.10: '#c0c0c0',  // Silver       — Good end (AQI 50)
+                    0.20: '#a8a8a8',  // Medium Grey  — Satisfactory end (AQI 100)
+                    0.40: '#8a8a8a',  // Grey         — Moderate end (AQI 200)
+                    0.60: '#6b6b6b',  // Dark Grey    — Poor end (AQI 300)
+                    0.80: '#4a4a4a',  // Charcoal     — Very Poor end (AQI 400)
+                    1.00: '#2d2d2d'   // Dark Charcoal — Severe (AQI 500)
                 }
             }).addTo(map);
         }
